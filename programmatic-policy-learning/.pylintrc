@@ -3,11 +3,11 @@
 # A comma-separated list of package or module names from where C extensions may
 # be loaded. Extensions are loading into the active Python interpreter and may
 # run arbitrary code
-extension-pkg-whitelist=numpy
+extension-pkg-whitelist=numpy,pybullet
 
 # Add files or directories to the blacklist. They should be base names, not
 # paths.
-ignore=CVS,venv,.venv,build,dist,third-party
+ignore=CVS,venv,.venv
 
 # Add paths to the blacklist.
 ignore-paths=
@@ -272,6 +272,11 @@ contextmanager-decorators=contextlib.contextmanager,tensorflow.python.util.tf_co
 # system, and so shouldn't trigger E1101 when accessed. Python regular
 # expressions are accepted.
 generated-members=torch.*,cv2.*
+
+# Tells whether missing members accessed in mixin class should be ignored. A
+# mixin class is detected if its name ends with "mixin" (case insensitive).
+; ignore-mixin-members=yes # deprecated
+
 
 # This flag controls whether pylint should warn about no-member and similar
 # checks whenever an opaque object is returned when inferring. The inference
