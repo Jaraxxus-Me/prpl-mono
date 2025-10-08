@@ -16,6 +16,7 @@ from tomsgeoms2d.utils import geom2ds_intersect
 
 from prbench.envs.dynamic2d.object_types import (
     DynRectangleType,
+    DynRTrapezoidType,
     KinRectangleType,
     KinRobotType,
 )
@@ -555,6 +556,8 @@ def object_to_multibody2d(
         multibody = geom2d_lobject_to_multibody2d(obj, state)
     elif obj.is_instance(DoubleRectType):
         multibody = geom2d_double_rectangle_to_multibody2d(obj, state)
+    elif obj.is_instance(DynRTrapezoidType):
+        multibody = rtrapezoid_to_multibody2d(obj, state)
     else:
         raise NotImplementedError
     if is_static:
@@ -578,3 +581,34 @@ def rectangle_object_to_geom(
     geom = multibody.bodies[0].geom
     assert isinstance(geom, Rectangle)
     return geom
+
+def rtrapezoid_to_multibody2d(
+    obj: Object,
+    state: ObjectCentricState,
+) -> MultiBody2D:
+    """Helper to create a MultiBody2D for a DynRTrapezoidType object."""
+    assert obj.is_instance(DynRTrapezoidType)
+    # Get parameters
+    x = state.get(obj, "x")
+    y = state.get(obj, "y")
+    theta = state.get(obj, "theta")
+    length = state.get(obj, "length")
+    height = state.get(obj, "height")
+    color = (
+        state.get(obj, "color_r"),
+        state.get(obj, "color_g"),
+        state.get(obj, "color_b"),
+    )
+    z_order = ZOrder(int(state.get(obj, "z_order")))
+
+    from tomsgeoms2d.structs import RTrapezoid
+
+    geom = RTrapezoid(x, y, length, height, theta)
+
+    rendering_kwargs = {
+        "facecolor": color,
+        "edgecolor": BLACK,
+    }
+    body = Body2D(geom, z_order, rendering_kwargs, name="rtrapezoid")
+
+    return MultiBody2D(obj.name, [body])
