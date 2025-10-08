@@ -6,7 +6,14 @@ from typing import Tuple
 
 import numpy as np
 
-from tomsgeoms2d.structs import Circle, Geom2D, LineSegment, Lobject, Rectangle
+from tomsgeoms2d.structs import (
+    Circle,
+    Geom2D,
+    LineSegment,
+    Lobject,
+    Rectangle,
+    RTrapezoid,
+)
 
 
 def line_segments_intersect(seg1: LineSegment, seg2: LineSegment) -> bool:
@@ -161,6 +168,65 @@ def lobject_intersects_circle(lobj1: Lobject, lobj2: Circle) -> bool:
     return False
 
 
+def rtrapezoids_intersect(trap1: RTrapezoid, trap2: RTrapezoid) -> bool:
+    """Checks if two right-angled trapezoids intersect."""
+    # Case 1: line segments intersect.
+    if any(
+        line_segments_intersect(seg1, seg2)
+        for seg1 in trap1.line_segments
+        for seg2 in trap2.line_segments
+    ):
+        return True
+    # Case 2: trap1 inside trap2.
+    if trap1.contains_point(trap2.center[0], trap2.center[1]):
+        return True
+    # Case 3: trap2 inside trap1.
+    if trap2.contains_point(trap1.center[0], trap1.center[1]):
+        return True
+    # Not intersecting.
+    return False
+
+
+def line_segment_intersects_rtrapezoid(seg: LineSegment, trap: RTrapezoid) -> bool:
+    """Checks if a line segment intersects a right-angled trapezoid."""
+    # Case 1: one of the end points of the segment is in the trapezoid.
+    if trap.contains_point(seg.x1, seg.y1) or trap.contains_point(seg.x2, seg.y2):
+        return True
+    # Case 2: the segment intersects with one of the trapezoid sides.
+    return any(line_segments_intersect(s, seg) for s in trap.line_segments)
+
+
+def rtrapezoid_intersects_circle(trap: RTrapezoid, circ: Circle) -> bool:
+    """Checks if a right-angled trapezoid intersects a circle."""
+    # Case 1: the circle's center is in the trapezoid.
+    if trap.contains_point(circ.x, circ.y):
+        return True
+    # Case 2: one of the sides of the trapezoid intersects the circle.
+    for seg in trap.line_segments:
+        if line_segment_intersects_circle(seg, circ):
+            return True
+    return False
+
+
+def rtrapezoid_intersects_rectangle(trap: RTrapezoid, rect: Rectangle) -> bool:
+    """Checks if a right-angled trapezoid intersects a rectangle."""
+    # Case 1: line segments intersect.
+    if any(
+        line_segments_intersect(seg1, seg2)
+        for seg1 in trap.line_segments
+        for seg2 in rect.line_segments
+    ):
+        return True
+    # Case 2: trap inside rect.
+    if trap.contains_point(rect.center[0], rect.center[1]):
+        return True
+    # Case 3: rect inside trap.
+    if rect.contains_point(trap.center[0], trap.center[1]):
+        return True
+    # Not intersecting.
+    return False
+
+
 def geom2ds_intersect(geom1: Geom2D, geom2: Geom2D) -> bool:
     """Check if two 2D bodies intersect."""
     if isinstance(geom1, LineSegment) and isinstance(geom2, LineSegment):
@@ -169,8 +235,12 @@ def geom2ds_intersect(geom1: Geom2D, geom2: Geom2D) -> bool:
         return line_segment_intersects_circle(geom1, geom2)
     if isinstance(geom1, LineSegment) and isinstance(geom2, Rectangle):
         return line_segment_intersects_rectangle(geom1, geom2)
+    if isinstance(geom1, LineSegment) and isinstance(geom2, RTrapezoid):
+        return line_segment_intersects_rtrapezoid(geom1, geom2)
     if isinstance(geom1, Rectangle) and isinstance(geom2, LineSegment):
         return line_segment_intersects_rectangle(geom2, geom1)
+    if isinstance(geom1, RTrapezoid) and isinstance(geom2, LineSegment):
+        return line_segment_intersects_rtrapezoid(geom2, geom1)
     if isinstance(geom1, Circle) and isinstance(geom2, LineSegment):
         return line_segment_intersects_circle(geom2, geom1)
     if isinstance(geom1, Rectangle) and isinstance(geom2, Rectangle):
@@ -181,6 +251,16 @@ def geom2ds_intersect(geom1: Geom2D, geom2: Geom2D) -> bool:
         return rectangle_intersects_circle(geom2, geom1)
     if isinstance(geom1, Circle) and isinstance(geom2, Circle):
         return circles_intersect(geom1, geom2)
+    if isinstance(geom1, RTrapezoid) and isinstance(geom2, RTrapezoid):
+        return rtrapezoids_intersect(geom1, geom2)
+    if isinstance(geom1, RTrapezoid) and isinstance(geom2, Circle):
+        return rtrapezoid_intersects_circle(geom1, geom2)
+    if isinstance(geom1, Circle) and isinstance(geom2, RTrapezoid):
+        return rtrapezoid_intersects_circle(geom2, geom1)
+    if isinstance(geom1, RTrapezoid) and isinstance(geom2, Rectangle):
+        return rtrapezoid_intersects_rectangle(geom1, geom2)
+    if isinstance(geom1, Rectangle) and isinstance(geom2, RTrapezoid):
+        return rtrapezoid_intersects_rectangle(geom2, geom1)
     if isinstance(geom1, Lobject) and isinstance(geom2, Rectangle):
         return lobject_intersects_rectangle(geom1, geom2)
     if isinstance(geom1, Rectangle) and isinstance(geom2, Lobject):

@@ -4,7 +4,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from tomsgeoms2d.structs import Circle, LineSegment, Lobject, Rectangle, Triangle
+from tomsgeoms2d.structs import (
+    Circle,
+    LineSegment,
+    Lobject,
+    Rectangle,
+    RTrapezoid,
+    Triangle,
+)
 from tomsgeoms2d.utils import geom2ds_intersect
 
 
@@ -369,6 +376,163 @@ def test_lobject_circle_intersection():
     lobject = Lobject(x=0, y=0, width=1, lengths=[1, 1], theta=0)
     assert geom2ds_intersect(lobject, Circle(x=0, y=0, radius=1))
     assert geom2ds_intersect(Circle(x=0, y=0, radius=1), lobject)
+
+
+def test_rtrapezoid():
+    """Tests for RTrapezoid()."""
+    _, ax = plt.subplots(1, 1, figsize=(10, 10))
+    ax.set_xlim((-5, 5))
+    ax.set_ylim((-5, 5))
+
+    # Create basic trapezoid: l=4, h=2
+    # Vertices: (0,0), (4,0), (2,2), (0,2)
+    trap1 = RTrapezoid(x=0, y=0, l=4, h=2, theta=0)
+    assert trap1.x == 0
+    assert trap1.y == 0
+    assert trap1.l == 4
+    assert trap1.h == 2
+    assert trap1.theta == 0
+    trap1.plot(ax, color="red", alpha=0.5)
+
+    # Check vertices
+    expected_vertices = [(0, 0), (4, 0), (2, 2), (0, 2)]
+    assert np.allclose(sorted(trap1.vertices), sorted(expected_vertices))
+
+    # Plot vertices
+    for x, y in trap1.vertices:
+        v = Circle(x, y, radius=0.1)
+        v.plot(ax, facecolor="none", edgecolor="black", linewidth=1, linestyle="dashed")
+
+    # Plot line segments
+    for seg in trap1.line_segments:
+        seg.plot(ax, color="black", linewidth=1, linestyle="dashed")
+
+    # Test contains_point
+    assert trap1.contains_point(1, 1)  # Inside the rectangular part
+    assert trap1.contains_point(0.5, 0.5)  # Inside the rectangular part
+    assert trap1.contains_point(2.5, 0.5)  # In the triangular part
+    assert trap1.contains_point(3, 1)  # In the triangular part
+    assert not trap1.contains_point(3.5, 1.5)  # Outside (above slant)
+    assert not trap1.contains_point(-0.1, 1)  # Outside (left)
+    assert not trap1.contains_point(4.1, 0.5)  # Outside (right)
+    assert not trap1.contains_point(1, 2.1)  # Outside (top)
+    assert not trap1.contains_point(1, -0.1)  # Outside (bottom)
+
+    # Test area
+    expected_area = (4 + 2) * 2 / 2  # (l + (l-h)) * h / 2 = 6
+    assert np.isclose(trap1.area, expected_area)
+
+    # Test center
+    center = trap1.center
+    assert center[0] > 0 and center[0] < 4
+    assert center[1] > 0 and center[1] < 2
+    center_circle = Circle(center[0], center[1], radius=0.1)
+    center_circle.plot(ax, color="blue")
+
+    # Create rotated trapezoid
+    trap2 = RTrapezoid(x=1, y=-2, l=3, h=1.5, theta=0.5)
+    trap2.plot(ax, color="blue", alpha=0.5)
+
+    # Create another trapezoid
+    trap3 = RTrapezoid(x=-3, y=1, l=2.5, h=1, theta=-0.3)
+    trap3.plot(ax, color="green", alpha=0.5)
+
+    # Test intersections
+    assert geom2ds_intersect(trap1, trap2)
+    assert not geom2ds_intersect(trap1, trap3)
+    assert not geom2ds_intersect(trap2, trap3)
+
+    # Test validation - h must be < l
+    with pytest.raises(ValueError) as e:
+        RTrapezoid(x=0, y=0, l=2, h=2, theta=0)
+    assert "Height h must be less than length l" in str(e)
+
+    with pytest.raises(ValueError) as e:
+        RTrapezoid(x=0, y=0, l=2, h=3, theta=0)
+    assert "Height h must be less than length l" in str(e)
+
+    # Test negative values
+    with pytest.raises(ValueError) as e:
+        RTrapezoid(x=0, y=0, l=-2, h=1, theta=0)
+    assert "Length l must be positive" in str(e)
+
+    with pytest.raises(ValueError) as e:
+        RTrapezoid(x=0, y=0, l=2, h=-1, theta=0)
+    assert "Height h must be positive" in str(e)
+
+    # Test sample_random_point
+    rng = np.random.default_rng(0)
+    for _ in range(100):
+        p = trap1.sample_random_point(rng)
+        assert trap1.contains_point(p[0], p[1])
+        plt.plot(p[0], p[1], "ro", markersize=2)
+
+    # Test rotate_about_point
+    trap4 = RTrapezoid(x=-4, y=-2, l=2, h=1, theta=0)
+    trap4.plot(ax, facecolor="yellow", edgecolor="gray")
+    origin = Circle(x=-3, y=-1.5, radius=0.05)
+    origin.plot(ax, color="black")
+    trap5 = trap4.rotate_about_point(origin.x, origin.y, rot=np.pi / 4)
+    trap5.plot(ax, facecolor="none", edgecolor="black", linestyle="dashed")
+
+    # Test scale_about_center
+    trap6 = RTrapezoid(x=2, y=2, l=2, h=1, theta=0.2)
+    trap6.plot(ax, facecolor="purple", alpha=0.3)
+    trap7 = trap6.scale_about_center(scale=0.5)
+    trap7.plot(ax, facecolor="orange", alpha=0.5)
+    # Verify centers match
+    assert np.allclose(trap6.center, trap7.center, atol=0.1)
+
+    # Uncomment for debugging.
+    # plt.savefig("/tmp/rtrapezoid_unit_test.png")
+
+
+def test_rtrapezoid_line_segment_intersection():
+    """Tests for line_segment_intersects_rtrapezoid()."""
+    trap1 = RTrapezoid(x=0, y=0, l=4, h=2, theta=0)
+    seg1 = LineSegment(-1, 1, 2, 1)
+    assert geom2ds_intersect(seg1, trap1)
+    assert geom2ds_intersect(trap1, seg1)
+
+    seg2 = LineSegment(-2, 3, 5, 3)
+    assert not geom2ds_intersect(seg2, trap1)
+    assert not geom2ds_intersect(trap1, seg2)
+
+    seg3 = LineSegment(1, -2, 1, -1)
+    assert not geom2ds_intersect(seg3, trap1)
+    assert not geom2ds_intersect(trap1, seg3)
+
+
+def test_rtrapezoid_circle_intersection():
+    """Tests for rtrapezoid_intersects_circle()."""
+    trap1 = RTrapezoid(x=0, y=0, l=4, h=2, theta=0)
+    circ1 = Circle(x=1, y=1, radius=0.5)
+    assert geom2ds_intersect(trap1, circ1)
+    assert geom2ds_intersect(circ1, trap1)
+
+    circ2 = Circle(x=5, y=1, radius=0.5)
+    assert not geom2ds_intersect(trap1, circ2)
+    assert not geom2ds_intersect(circ2, trap1)
+
+    circ3 = Circle(x=2, y=2, radius=3)
+    assert geom2ds_intersect(trap1, circ3)
+    assert geom2ds_intersect(circ3, trap1)
+
+
+def test_rtrapezoid_rectangle_intersection():
+    """Tests for rtrapezoid_intersects_rectangle()."""
+    trap1 = RTrapezoid(x=0, y=0, l=4, h=2, theta=0)
+    rect1 = Rectangle(x=1, y=1, width=1, height=1, theta=0)
+    assert geom2ds_intersect(trap1, rect1)
+    assert geom2ds_intersect(rect1, trap1)
+
+    rect2 = Rectangle(x=5, y=1, width=1, height=1, theta=0)
+    assert not geom2ds_intersect(trap1, rect2)
+    assert not geom2ds_intersect(rect2, trap1)
+
+    rect3 = Rectangle(x=-1, y=-1, width=6, height=4, theta=0)
+    assert geom2ds_intersect(trap1, rect3)
+    assert geom2ds_intersect(rect3, trap1)
 
 
 def test_geom2ds_intersect():

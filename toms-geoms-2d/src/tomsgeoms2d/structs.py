@@ -318,6 +318,193 @@ class Rectangle(Geom2D):
 
 
 @dataclass(frozen=True)
+class RTrapezoid(Geom2D):
+    """A helper class for representing a right-angled trapezoid.
+
+    The trapezoid has:
+    - A long side of length l (bottom side)
+    - A height h (perpendicular to the long side)
+    - A short side of length l-h (top side, parallel to bottom)
+    - The right angle is at the origin (x, y) where the long side meets the left edge
+
+    Vertices in unrotated configuration:
+        (x, y+h) ------- (x+l-h, y+h)  [short side: l-h]
+           |                /
+           |              /   [slanted side]
+           |            /
+        (x, y) ------- (x+l, y)  [long side: l]
+    """
+
+    x: float  # Origin at the right angle
+    y: float
+    l: float  # Length of the long side
+    h: float  # Height of the trapezoid
+    theta: float  # Rotation angle in radians
+
+    def __post_init__(self) -> None:
+        """Validate the trapezoid parameters."""
+        if self.l <= 0:
+            raise ValueError("Length l must be positive.")
+        if self.h <= 0:
+            raise ValueError("Height h must be positive.")
+        if self.h >= self.l:
+            raise ValueError("Height h must be less than length l (l-h > 0).")
+        assert -np.pi <= self.theta <= np.pi, "Expecting angle in [-pi, pi]."
+
+    @functools.cached_property
+    def rotation_matrix(self) -> NDArray[np.float64]:
+        """Get the rotation matrix."""
+        return np.array(
+            [
+                [np.cos(self.theta), -np.sin(self.theta)],
+                [np.sin(self.theta), np.cos(self.theta)],
+            ]
+        )
+
+    @functools.cached_property
+    def inverse_rotation_matrix(self) -> NDArray[np.float64]:
+        """Get the inverse rotation matrix."""
+        return np.array(
+            [
+                [np.cos(self.theta), np.sin(self.theta)],
+                [-np.sin(self.theta), np.cos(self.theta)],
+            ]
+        )
+
+    @functools.cached_property
+    def vertices(self) -> List[Tuple[float, float]]:
+        """Get the four vertices of the right-angled trapezoid."""
+        translate_vector = np.array([self.x, self.y])
+        # Define vertices in unrotated frame (CCW order starting from origin)
+        vertices = np.array(
+            [
+                (0, 0),  # Bottom left (origin, right angle)
+                (self.l, 0),  # Bottom right
+                (self.l - self.h, self.h),  # Top right
+                (0, self.h),  # Top left
+            ]
+        )
+        # Apply rotation then translation
+        vertices = vertices @ self.rotation_matrix.T
+        vertices = translate_vector + vertices
+        return list(map(lambda p: (p[0], p[1]), vertices))
+
+    @functools.cached_property
+    def line_segments(self) -> List[LineSegment]:
+        """Get the four line segments for the trapezoid."""
+        vs = list(zip(self.vertices, self.vertices[1:] + [self.vertices[0]]))
+        line_segments = []
+        for (x1, y1), (x2, y2) in vs:
+            line_segments.append(LineSegment(x1, y1, x2, y2))
+        return line_segments
+
+    @functools.cached_property
+    def center(self) -> Tuple[float, float]:
+        """Get the centroid of the trapezoid."""
+        x, y = np.mean(self.vertices, axis=0)
+        return (x, y)
+
+    @functools.cached_property
+    def area(self) -> float:
+        """Calculate the area of the trapezoid: (l + (l-h)) * h / 2."""
+        return (self.l + (self.l - self.h)) * self.h / 2
+
+    def contains_point(self, x: float, y: float) -> bool:
+        """Check if a point is inside the trapezoid using cross products."""
+        # Transform point to local coordinates
+        rx, ry = np.array([x - self.x, y - self.y]) @ self.inverse_rotation_matrix.T
+
+        # Check basic bounds first
+        if not (0 <= rx <= self.l and 0 <= ry <= self.h):
+            return False
+
+        # Check if point is below the slanted line
+        # The slanted line goes from (l, 0) to (l-h, h)
+        # Equation: For x from l-h to l, y_max = h * (l - x) / h = l - x
+        # So we need: y <= l - x (in the region where x > l-h)
+        if rx > self.l - self.h:
+            # In the region with the slant
+            y_max_at_rx = self.h * (self.l - rx) / self.h
+            if ry > y_max_at_rx:
+                return False
+
+        return True
+
+    def sample_random_point(self, rng: np.random.Generator) -> Tuple[float, float]:
+        """Sample a random point inside the trapezoid.
+
+        Uses rejection sampling within the bounding rectangle.
+        """
+        while True:
+            # Sample from bounding rectangle
+            rx = rng.uniform(0, self.l)
+            ry = rng.uniform(0, self.h)
+
+            # Check if point is valid (below slanted edge)
+            if rx <= self.l - self.h or ry <= self.h * (self.l - rx) / self.h:
+                # Rotate and translate
+                rotated = np.array([rx, ry]) @ self.rotation_matrix.T
+                x = rotated[0] + self.x
+                y = rotated[1] + self.y
+                assert self.contains_point(x, y)
+                return (x, y)
+
+    def rotate_about_point(self, x: float, y: float, rot: float) -> RTrapezoid:
+        """Create a new trapezoid rotated CCW by rot radians about (x, y)."""
+        vertices = np.array(self.vertices)
+        origin = np.array([x, y])
+        # Translate to origin
+        vertices = vertices - origin
+        # Rotate
+        rotate_matrix = np.array(
+            [[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]]
+        )
+        vertices = vertices @ rotate_matrix.T
+        # Translate back
+        vertices = vertices + origin
+
+        # New origin is the first vertex (bottom-left)
+        new_x, new_y = vertices[0]
+        # Compute new theta from bottom edge direction
+        bottom_edge = vertices[1] - vertices[0]
+        new_theta = np.arctan2(bottom_edge[1], bottom_edge[0])
+
+        return RTrapezoid(new_x, new_y, self.l, self.h, new_theta)
+
+    def scale_about_center(self, scale: float) -> RTrapezoid:
+        """Scale the trapezoid uniformly about its center."""
+        center_x, center_y = self.center
+        new_l = self.l * scale
+        new_h = self.h * scale
+
+        # Create an un-rotated trapezoid with new dimensions at origin
+        temp_trap = RTrapezoid(0, 0, new_l, new_h, 0)
+        # Get its centroid in local (unrotated) coordinates
+        temp_center_local = temp_trap.center
+
+        # The new origin should be positioned such that when rotated,
+        # the centroid ends up at (center_x, center_y)
+        # Inverse transform: go from desired center to origin position
+        center_vector = np.array([center_x, center_y])
+        local_center_vector = np.array(temp_center_local)
+
+        # Rotate local center to world coordinates
+        rotated_center = local_center_vector @ self.rotation_matrix.T
+
+        # New origin = desired_center - rotated_local_center
+        new_origin = center_vector - rotated_center
+
+        return RTrapezoid(
+            new_origin[0], new_origin[1], new_l, new_h, self.theta
+        )
+
+    def plot(self, ax: plt.Axes, **kwargs: Any) -> None:
+        """Plot the trapezoid as a polygon patch."""
+        patch = patches.Polygon(self.vertices, **kwargs)
+        ax.add_patch(patch)
+
+
+@dataclass(frozen=True)
 class Lobject(Geom2D):
     """A helper class for representing a L-shaped object for visualizing and
     collision checking.
@@ -617,6 +804,65 @@ def rectangle_intersects_circle(rect: Rectangle, circ: Circle) -> bool:
     return False
 
 
+def rtrapezoids_intersect(trap1: RTrapezoid, trap2: RTrapezoid) -> bool:
+    """Checks if two right-angled trapezoids intersect."""
+    # Case 1: line segments intersect.
+    if any(
+        line_segments_intersect(seg1, seg2)
+        for seg1 in trap1.line_segments
+        for seg2 in trap2.line_segments
+    ):
+        return True
+    # Case 2: trap1 inside trap2.
+    if trap1.contains_point(trap2.center[0], trap2.center[1]):
+        return True
+    # Case 3: trap2 inside trap1.
+    if trap2.contains_point(trap1.center[0], trap1.center[1]):
+        return True
+    # Not intersecting.
+    return False
+
+
+def line_segment_intersects_rtrapezoid(seg: LineSegment, trap: RTrapezoid) -> bool:
+    """Checks if a line segment intersects a right-angled trapezoid."""
+    # Case 1: one of the end points of the segment is in the trapezoid.
+    if trap.contains_point(seg.x1, seg.y1) or trap.contains_point(seg.x2, seg.y2):
+        return True
+    # Case 2: the segment intersects with one of the trapezoid sides.
+    return any(line_segments_intersect(s, seg) for s in trap.line_segments)
+
+
+def rtrapezoid_intersects_circle(trap: RTrapezoid, circ: Circle) -> bool:
+    """Checks if a right-angled trapezoid intersects a circle."""
+    # Case 1: the circle's center is in the trapezoid.
+    if trap.contains_point(circ.x, circ.y):
+        return True
+    # Case 2: one of the sides of the trapezoid intersects the circle.
+    for seg in trap.line_segments:
+        if line_segment_intersects_circle(seg, circ):
+            return True
+    return False
+
+
+def rtrapezoid_intersects_rectangle(trap: RTrapezoid, rect: Rectangle) -> bool:
+    """Checks if a right-angled trapezoid intersects a rectangle."""
+    # Case 1: line segments intersect.
+    if any(
+        line_segments_intersect(seg1, seg2)
+        for seg1 in trap.line_segments
+        for seg2 in rect.line_segments
+    ):
+        return True
+    # Case 2: trap inside rect.
+    if trap.contains_point(rect.center[0], rect.center[1]):
+        return True
+    # Case 3: rect inside trap.
+    if rect.contains_point(trap.center[0], trap.center[1]):
+        return True
+    # Not intersecting.
+    return False
+
+
 def geom2ds_intersect(geom1: Geom2D, geom2: Geom2D) -> bool:
     """Check if two 2D bodies intersect."""
     if isinstance(geom1, LineSegment) and isinstance(geom2, LineSegment):
@@ -625,8 +871,12 @@ def geom2ds_intersect(geom1: Geom2D, geom2: Geom2D) -> bool:
         return line_segment_intersects_circle(geom1, geom2)
     if isinstance(geom1, LineSegment) and isinstance(geom2, Rectangle):
         return line_segment_intersects_rectangle(geom1, geom2)
+    if isinstance(geom1, LineSegment) and isinstance(geom2, RTrapezoid):
+        return line_segment_intersects_rtrapezoid(geom1, geom2)
     if isinstance(geom1, Rectangle) and isinstance(geom2, LineSegment):
         return line_segment_intersects_rectangle(geom2, geom1)
+    if isinstance(geom1, RTrapezoid) and isinstance(geom2, LineSegment):
+        return line_segment_intersects_rtrapezoid(geom2, geom1)
     if isinstance(geom1, Circle) and isinstance(geom2, LineSegment):
         return line_segment_intersects_circle(geom2, geom1)
     if isinstance(geom1, Rectangle) and isinstance(geom2, Rectangle):
@@ -637,6 +887,16 @@ def geom2ds_intersect(geom1: Geom2D, geom2: Geom2D) -> bool:
         return rectangle_intersects_circle(geom2, geom1)
     if isinstance(geom1, Circle) and isinstance(geom2, Circle):
         return circles_intersect(geom1, geom2)
+    if isinstance(geom1, RTrapezoid) and isinstance(geom2, RTrapezoid):
+        return rtrapezoids_intersect(geom1, geom2)
+    if isinstance(geom1, RTrapezoid) and isinstance(geom2, Circle):
+        return rtrapezoid_intersects_circle(geom1, geom2)
+    if isinstance(geom1, Circle) and isinstance(geom2, RTrapezoid):
+        return rtrapezoid_intersects_circle(geom2, geom1)
+    if isinstance(geom1, RTrapezoid) and isinstance(geom2, Rectangle):
+        return rtrapezoid_intersects_rectangle(geom1, geom2)
+    if isinstance(geom1, Rectangle) and isinstance(geom2, RTrapezoid):
+        return rtrapezoid_intersects_rectangle(geom2, geom1)
     raise NotImplementedError(
         "Intersection not implemented for geoms " f"{geom1} and {geom2}"
     )
