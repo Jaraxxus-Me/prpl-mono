@@ -49,7 +49,6 @@ Dynamic2DRobotEnvTypeFeatures[DynRTrapezoidType] = Dynamic2DRobotEnvTypeFeatures
 ] + [
     "length",
     "height",
-    "mass",
 ]
 
 # A robot with a circle base, a rectangle gripper_base, and two rectangle grippers.
