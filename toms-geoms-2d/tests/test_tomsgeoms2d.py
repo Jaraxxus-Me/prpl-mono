@@ -535,6 +535,176 @@ def test_rtrapezoid_rectangle_intersection():
     assert geom2ds_intersect(rect3, trap1)
 
 
+def test_triangle_line_segment_intersection():
+    """Tests for line_segment_intersects_triangle()."""
+    tri1 = Triangle(0, 0, 4, 0, 2, 3)
+
+    # Line segment that intersects the triangle
+    seg1 = LineSegment(1, 1, 3, 1)
+    assert geom2ds_intersect(seg1, tri1)
+    assert geom2ds_intersect(tri1, seg1)
+
+    # Line segment that passes through a vertex
+    seg2 = LineSegment(-1, -1, 1, 1)
+    assert geom2ds_intersect(seg2, tri1)
+    assert geom2ds_intersect(tri1, seg2)
+
+    # Line segment completely inside the triangle
+    seg3 = LineSegment(2, 1, 2.5, 1.5)
+    assert geom2ds_intersect(seg3, tri1)
+    assert geom2ds_intersect(tri1, seg3)
+
+    # Line segment completely outside the triangle
+    seg4 = LineSegment(5, 5, 6, 6)
+    assert not geom2ds_intersect(seg4, tri1)
+    assert not geom2ds_intersect(tri1, seg4)
+
+    # Line segment that crosses an edge
+    seg5 = LineSegment(0, 1, 4, 1)
+    assert geom2ds_intersect(seg5, tri1)
+    assert geom2ds_intersect(tri1, seg5)
+
+
+def test_triangle_circle_intersection():
+    """Tests for triangle_intersects_circle()."""
+    tri1 = Triangle(0, 0, 4, 0, 2, 3)
+
+    # Circle centered inside triangle
+    circ1 = Circle(x=2, y=1, radius=0.5)
+    assert geom2ds_intersect(tri1, circ1)
+    assert geom2ds_intersect(circ1, tri1)
+
+    # Circle that overlaps with triangle edge
+    circ2 = Circle(x=0, y=0, radius=1)
+    assert geom2ds_intersect(tri1, circ2)
+    assert geom2ds_intersect(circ2, tri1)
+
+    # Circle completely outside triangle
+    circ3 = Circle(x=10, y=10, radius=1)
+    assert not geom2ds_intersect(tri1, circ3)
+    assert not geom2ds_intersect(circ3, tri1)
+
+    # Circle that contains a vertex
+    circ4 = Circle(x=2, y=3, radius=0.5)
+    assert geom2ds_intersect(tri1, circ4)
+    assert geom2ds_intersect(circ4, tri1)
+
+    # Large circle that contains the triangle
+    circ5 = Circle(x=2, y=1.5, radius=10)
+    assert geom2ds_intersect(tri1, circ5)
+    assert geom2ds_intersect(circ5, tri1)
+
+
+def test_triangle_rectangle_intersection():
+    """Tests for triangle_intersects_rectangle()."""
+    tri1 = Triangle(0, 0, 4, 0, 2, 3)
+
+    # Rectangle that overlaps with triangle
+    rect1 = Rectangle(x=1, y=0.5, width=2, height=1, theta=0)
+    assert geom2ds_intersect(tri1, rect1)
+    assert geom2ds_intersect(rect1, tri1)
+
+    # Rectangle completely inside triangle
+    rect2 = Rectangle(x=1.5, y=0.5, width=1, height=0.5, theta=0)
+    assert geom2ds_intersect(tri1, rect2)
+    assert geom2ds_intersect(rect2, tri1)
+
+    # Rectangle completely outside triangle
+    rect3 = Rectangle(x=5, y=5, width=1, height=1, theta=0)
+    assert not geom2ds_intersect(tri1, rect3)
+    assert not geom2ds_intersect(rect3, tri1)
+
+    # Rotated rectangle that intersects triangle
+    rect4 = Rectangle(x=1, y=1, width=2, height=1, theta=0.5)
+    assert geom2ds_intersect(tri1, rect4)
+    assert geom2ds_intersect(rect4, tri1)
+
+    # Rectangle that contains the triangle
+    rect5 = Rectangle(x=-1, y=-1, width=6, height=5, theta=0)
+    assert geom2ds_intersect(tri1, rect5)
+    assert geom2ds_intersect(rect5, tri1)
+
+
+def test_triangle_triangle_intersection():
+    """Tests for triangles_intersect()."""
+    tri1 = Triangle(0, 0, 4, 0, 2, 3)
+
+    # Overlapping triangles
+    tri2 = Triangle(1, 1, 5, 1, 3, 4)
+    assert geom2ds_intersect(tri1, tri2)
+    assert geom2ds_intersect(tri2, tri1)
+
+    # Triangles sharing a vertex
+    tri3 = Triangle(0, 0, -2, 0, -1, 2)
+    assert geom2ds_intersect(tri1, tri3)
+    assert geom2ds_intersect(tri3, tri1)
+
+    # Non-intersecting triangles
+    tri4 = Triangle(10, 10, 12, 10, 11, 12)
+    assert not geom2ds_intersect(tri1, tri4)
+    assert not geom2ds_intersect(tri4, tri1)
+
+    # One triangle inside another
+    tri5 = Triangle(1.5, 0.5, 2.5, 0.5, 2, 1.5)
+    assert geom2ds_intersect(tri1, tri5)
+    assert geom2ds_intersect(tri5, tri1)
+
+    # Triangles with overlapping edges (not just touching at a point)
+    tri6 = Triangle(1, 2, 3, 2, 2, 4)
+    assert geom2ds_intersect(tri1, tri6)
+    assert geom2ds_intersect(tri6, tri1)
+
+
+def test_triangle_rtrapezoid_intersection():
+    """Tests for triangle_intersects_rtrapezoid()."""
+    tri1 = Triangle(0, 0, 4, 0, 2, 3)
+    trap1 = RTrapezoid(x=1, y=0.5, l=3, h=2, theta=0)
+
+    # Triangle and trapezoid that overlap
+    assert geom2ds_intersect(tri1, trap1)
+    assert geom2ds_intersect(trap1, tri1)
+
+    # Non-intersecting triangle and trapezoid
+    trap2 = RTrapezoid(x=10, y=10, l=3, h=2, theta=0)
+    assert not geom2ds_intersect(tri1, trap2)
+    assert not geom2ds_intersect(trap2, tri1)
+
+    # Triangle inside trapezoid
+    tri2 = Triangle(1.2, 0.6, 2, 0.6, 1.6, 1.2)
+    assert geom2ds_intersect(tri2, trap1)
+    assert geom2ds_intersect(trap1, tri2)
+
+    # Rotated trapezoid intersecting triangle
+    trap3 = RTrapezoid(x=1, y=1, l=2, h=1, theta=0.3)
+    assert geom2ds_intersect(tri1, trap3)
+    assert geom2ds_intersect(trap3, tri1)
+
+
+def test_triangle_lobject_intersection():
+    """Tests for triangle_intersects_lobject()."""
+    tri1 = Triangle(0, 0, 4, 0, 2, 3)
+    lobj1 = Lobject(x=2, y=1, width=0.5, lengths=(1.5, 2), theta=0)
+
+    # Triangle and L-object that overlap
+    assert geom2ds_intersect(tri1, lobj1)
+    assert geom2ds_intersect(lobj1, tri1)
+
+    # Non-intersecting triangle and L-object
+    lobj2 = Lobject(x=10, y=10, width=0.5, lengths=(1, 1), theta=0)
+    assert not geom2ds_intersect(tri1, lobj2)
+    assert not geom2ds_intersect(lobj2, tri1)
+
+    # L-object intersecting triangle edge
+    lobj3 = Lobject(x=0, y=0, width=0.3, lengths=(1, 1), theta=0)
+    assert geom2ds_intersect(tri1, lobj3)
+    assert geom2ds_intersect(lobj3, tri1)
+
+    # Rotated L-object intersecting triangle
+    lobj4 = Lobject(x=2, y=1.5, width=0.4, lengths=(1, 1.5), theta=0.5)
+    assert geom2ds_intersect(tri1, lobj4)
+    assert geom2ds_intersect(lobj4, tri1)
+
+
 def test_geom2ds_intersect():
     """Tests for geom2ds_intersect()."""
     with pytest.raises(NotImplementedError):

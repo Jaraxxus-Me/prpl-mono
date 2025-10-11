@@ -13,6 +13,7 @@ from tomsgeoms2d.structs import (
     Lobject,
     Rectangle,
     RTrapezoid,
+    Triangle,
 )
 
 
@@ -227,6 +228,142 @@ def rtrapezoid_intersects_rectangle(trap: RTrapezoid, rect: Rectangle) -> bool:
     return False
 
 
+def line_segment_intersects_triangle(seg: LineSegment, tri: Triangle) -> bool:
+    """Checks if a line segment intersects a triangle."""
+    # Case 1: one of the end points of the segment is in the triangle.
+    if tri.contains_point(seg.x1, seg.y1) or tri.contains_point(seg.x2, seg.y2):
+        return True
+    # Case 2: the segment intersects with one of the triangle sides.
+    tri_seg1 = LineSegment(tri.x1, tri.y1, tri.x2, tri.y2)
+    tri_seg2 = LineSegment(tri.x2, tri.y2, tri.x3, tri.y3)
+    tri_seg3 = LineSegment(tri.x3, tri.y3, tri.x1, tri.y1)
+    return any(
+        line_segments_intersect(seg, tri_seg)
+        for tri_seg in [tri_seg1, tri_seg2, tri_seg3]
+    )
+
+
+def triangle_intersects_circle(tri: Triangle, circ: Circle) -> bool:
+    """Checks if a triangle intersects a circle."""
+    # Case 1: the circle's center is in the triangle.
+    if tri.contains_point(circ.x, circ.y):
+        return True
+    # Case 2: any vertex of the triangle is inside the circle.
+    if circ.contains_point(tri.x1, tri.y1):
+        return True
+    if circ.contains_point(tri.x2, tri.y2):
+        return True
+    if circ.contains_point(tri.x3, tri.y3):
+        return True
+    # Case 3: one of the sides of the triangle intersects the circle.
+    tri_seg1 = LineSegment(tri.x1, tri.y1, tri.x2, tri.y2)
+    tri_seg2 = LineSegment(tri.x2, tri.y2, tri.x3, tri.y3)
+    tri_seg3 = LineSegment(tri.x3, tri.y3, tri.x1, tri.y1)
+    for seg in [tri_seg1, tri_seg2, tri_seg3]:
+        if line_segment_intersects_circle(seg, circ):
+            return True
+    return False
+
+
+def triangle_intersects_rectangle(tri: Triangle, rect: Rectangle) -> bool:
+    """Checks if a triangle intersects a rectangle."""
+    # Case 1: any vertex of the triangle is inside the rectangle.
+    if rect.contains_point(tri.x1, tri.y1):
+        return True
+    if rect.contains_point(tri.x2, tri.y2):
+        return True
+    if rect.contains_point(tri.x3, tri.y3):
+        return True
+    # Case 2: any vertex of the rectangle is inside the triangle.
+    if any(tri.contains_point(vx, vy) for vx, vy in rect.vertices):
+        return True
+    # Case 3: any edge of the triangle intersects any edge of the rectangle.
+    tri_seg1 = LineSegment(tri.x1, tri.y1, tri.x2, tri.y2)
+    tri_seg2 = LineSegment(tri.x2, tri.y2, tri.x3, tri.y3)
+    tri_seg3 = LineSegment(tri.x3, tri.y3, tri.x1, tri.y1)
+    for tri_seg in [tri_seg1, tri_seg2, tri_seg3]:
+        for rect_seg in rect.line_segments:
+            if line_segments_intersect(tri_seg, rect_seg):
+                return True
+    return False
+
+
+def triangles_intersect(tri1: Triangle, tri2: Triangle) -> bool:
+    """Checks if two triangles intersect."""
+    # Case 1: any vertex of tri1 is inside tri2.
+    if tri2.contains_point(tri1.x1, tri1.y1):
+        return True
+    if tri2.contains_point(tri1.x2, tri1.y2):
+        return True
+    if tri2.contains_point(tri1.x3, tri1.y3):
+        return True
+    # Case 2: any vertex of tri2 is inside tri1.
+    if tri1.contains_point(tri2.x1, tri2.y1):
+        return True
+    if tri1.contains_point(tri2.x2, tri2.y2):
+        return True
+    if tri1.contains_point(tri2.x3, tri2.y3):
+        return True
+    # Case 3: any edge of tri1 intersects any edge of tri2.
+    tri1_seg1 = LineSegment(tri1.x1, tri1.y1, tri1.x2, tri1.y2)
+    tri1_seg2 = LineSegment(tri1.x2, tri1.y2, tri1.x3, tri1.y3)
+    tri1_seg3 = LineSegment(tri1.x3, tri1.y3, tri1.x1, tri1.y1)
+    tri2_seg1 = LineSegment(tri2.x1, tri2.y1, tri2.x2, tri2.y2)
+    tri2_seg2 = LineSegment(tri2.x2, tri2.y2, tri2.x3, tri2.y3)
+    tri2_seg3 = LineSegment(tri2.x3, tri2.y3, tri2.x1, tri2.y1)
+    for seg1 in [tri1_seg1, tri1_seg2, tri1_seg3]:
+        for seg2 in [tri2_seg1, tri2_seg2, tri2_seg3]:
+            if line_segments_intersect(seg1, seg2):
+                return True
+    return False
+
+
+def triangle_intersects_rtrapezoid(tri: Triangle, trap: RTrapezoid) -> bool:
+    """Checks if a triangle intersects a right-angled trapezoid."""
+    # Case 1: any vertex of the triangle is inside the trapezoid.
+    if trap.contains_point(tri.x1, tri.y1):
+        return True
+    if trap.contains_point(tri.x2, tri.y2):
+        return True
+    if trap.contains_point(tri.x3, tri.y3):
+        return True
+    # Case 2: any vertex of the trapezoid is inside the triangle.
+    if any(tri.contains_point(vx, vy) for vx, vy in trap.vertices):
+        return True
+    # Case 3: any edge of the triangle intersects any edge of the trapezoid.
+    tri_seg1 = LineSegment(tri.x1, tri.y1, tri.x2, tri.y2)
+    tri_seg2 = LineSegment(tri.x2, tri.y2, tri.x3, tri.y3)
+    tri_seg3 = LineSegment(tri.x3, tri.y3, tri.x1, tri.y1)
+    for tri_seg in [tri_seg1, tri_seg2, tri_seg3]:
+        for trap_seg in trap.line_segments:
+            if line_segments_intersect(tri_seg, trap_seg):
+                return True
+    return False
+
+
+def triangle_intersects_lobject(tri: Triangle, lobj: Lobject) -> bool:
+    """Checks if a triangle intersects an L-object."""
+    # Case 1: any vertex of the triangle is inside the L-object.
+    if lobj.contains_point(tri.x1, tri.y1):
+        return True
+    if lobj.contains_point(tri.x2, tri.y2):
+        return True
+    if lobj.contains_point(tri.x3, tri.y3):
+        return True
+    # Case 2: any vertex of the L-object is inside the triangle.
+    if any(tri.contains_point(vx, vy) for vx, vy in lobj.vertices):
+        return True
+    # Case 3: any edge of the triangle intersects any edge of the L-object.
+    tri_seg1 = LineSegment(tri.x1, tri.y1, tri.x2, tri.y2)
+    tri_seg2 = LineSegment(tri.x2, tri.y2, tri.x3, tri.y3)
+    tri_seg3 = LineSegment(tri.x3, tri.y3, tri.x1, tri.y1)
+    for tri_seg in [tri_seg1, tri_seg2, tri_seg3]:
+        for lobj_seg in lobj.line_segments:
+            if line_segments_intersect(tri_seg, lobj_seg):
+                return True
+    return False
+
+
 def geom2ds_intersect(geom1: Geom2D, geom2: Geom2D) -> bool:
     """Check if two 2D bodies intersect."""
     if isinstance(geom1, LineSegment) and isinstance(geom2, LineSegment):
@@ -237,10 +374,14 @@ def geom2ds_intersect(geom1: Geom2D, geom2: Geom2D) -> bool:
         return line_segment_intersects_rectangle(geom1, geom2)
     if isinstance(geom1, LineSegment) and isinstance(geom2, RTrapezoid):
         return line_segment_intersects_rtrapezoid(geom1, geom2)
+    if isinstance(geom1, LineSegment) and isinstance(geom2, Triangle):
+        return line_segment_intersects_triangle(geom1, geom2)
     if isinstance(geom1, Rectangle) and isinstance(geom2, LineSegment):
         return line_segment_intersects_rectangle(geom2, geom1)
     if isinstance(geom1, RTrapezoid) and isinstance(geom2, LineSegment):
         return line_segment_intersects_rtrapezoid(geom2, geom1)
+    if isinstance(geom1, Triangle) and isinstance(geom2, LineSegment):
+        return line_segment_intersects_triangle(geom2, geom1)
     if isinstance(geom1, Circle) and isinstance(geom2, LineSegment):
         return line_segment_intersects_circle(geom2, geom1)
     if isinstance(geom1, Rectangle) and isinstance(geom2, Rectangle):
@@ -269,6 +410,25 @@ def geom2ds_intersect(geom1: Geom2D, geom2: Geom2D) -> bool:
         return lobject_intersects_circle(geom1, geom2)
     if isinstance(geom1, Circle) and isinstance(geom2, Lobject):
         return lobject_intersects_circle(geom2, geom1)
+    # Triangle intersections
+    if isinstance(geom1, Triangle) and isinstance(geom2, Triangle):
+        return triangles_intersect(geom1, geom2)
+    if isinstance(geom1, Triangle) and isinstance(geom2, Circle):
+        return triangle_intersects_circle(geom1, geom2)
+    if isinstance(geom1, Circle) and isinstance(geom2, Triangle):
+        return triangle_intersects_circle(geom2, geom1)
+    if isinstance(geom1, Triangle) and isinstance(geom2, Rectangle):
+        return triangle_intersects_rectangle(geom1, geom2)
+    if isinstance(geom1, Rectangle) and isinstance(geom2, Triangle):
+        return triangle_intersects_rectangle(geom2, geom1)
+    if isinstance(geom1, Triangle) and isinstance(geom2, RTrapezoid):
+        return triangle_intersects_rtrapezoid(geom1, geom2)
+    if isinstance(geom1, RTrapezoid) and isinstance(geom2, Triangle):
+        return triangle_intersects_rtrapezoid(geom2, geom1)
+    if isinstance(geom1, Triangle) and isinstance(geom2, Lobject):
+        return triangle_intersects_lobject(geom1, geom2)
+    if isinstance(geom1, Lobject) and isinstance(geom2, Triangle):
+        return triangle_intersects_lobject(geom2, geom1)
     raise NotImplementedError(
         "Intersection not implemented for geoms " f"{geom1} and {geom2}"
     )

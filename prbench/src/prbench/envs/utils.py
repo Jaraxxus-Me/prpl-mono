@@ -16,6 +16,7 @@ from tomsgeoms2d.utils import geom2ds_intersect
 
 from prbench.envs.dynamic2d.object_types import (
     DynRectangleType,
+    DynTriangleType,
     DynRTrapezoidType,
     KinRectangleType,
     KinRobotType,
@@ -558,6 +559,9 @@ def object_to_multibody2d(
         multibody = geom2d_double_rectangle_to_multibody2d(obj, state)
     elif obj.is_instance(DynRTrapezoidType):
         multibody = rtrapezoid_to_multibody2d(obj, state)
+    elif obj.is_instance(DynTriangleType):
+        # Treat as a DynRTrapezoid with length_side2 = 0.
+        multibody = dyntriangle_to_multibody2d(obj, state)
     else:
         raise NotImplementedError
     if is_static:
@@ -610,5 +614,54 @@ def rtrapezoid_to_multibody2d(
         "edgecolor": BLACK,
     }
     body = Body2D(geom, z_order, rendering_kwargs, name="rtrapezoid")
+
+    return MultiBody2D(obj.name, [body])
+
+def dyntriangle_to_multibody2d(
+    obj: Object,
+    state: ObjectCentricState,
+) -> MultiBody2D:
+    """Helper to create a MultiBody2D for a DynTriangleType object.
+    The triangle has a right angle at the vertex (x,y), when theta=0 it looks like:
+        |\
+        | \
+        |  \
+        |   \
+        |____\
+    The x1,y1 vertex is at (x,y).
+    The x2,y2 vertex is at (x+length,y).
+    The x3,y3 vertex is at (x,y+height).
+    When theta != 0, the triangle is rotated counter-clockwise by theta around (x,y).
+    
+    """
+    assert obj.is_instance(DynTriangleType)
+    # Get parameters
+    x = state.get(obj, "x")
+    y = state.get(obj, "y")
+    theta = state.get(obj, "theta")
+    width = state.get(obj, "width")
+    height = state.get(obj, "height")
+    color = (
+        state.get(obj, "color_r"),
+        state.get(obj, "color_g"),
+        state.get(obj, "color_b"),
+    )
+    z_order = ZOrder(int(state.get(obj, "z_order")))
+
+    from tomsgeoms2d.structs import Triangle
+
+    x1 = x
+    y1 = y
+    x2 = x + width * np.cos(theta)
+    y2 = y + width * np.sin(theta)
+    x3 = x + height * np.cos(theta + np.pi / 2)
+    y3 = y + height * np.sin(theta + np.pi / 2)
+    geom = Triangle(x1, y1, x2, y2, x3, y3)
+
+    rendering_kwargs = {
+        "facecolor": color,
+        "edgecolor": BLACK,
+    }
+    body = Body2D(geom, z_order, rendering_kwargs, name="triangle")
 
     return MultiBody2D(obj.name, [body])

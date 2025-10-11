@@ -50,6 +50,14 @@ Dynamic2DRobotEnvTypeFeatures[DynRTrapezoidType] = Dynamic2DRobotEnvTypeFeatures
     "length",
     "height",
 ]
+# dynamic triangle
+DynTriangleType = Type("dyn_triangle", parent=Dynamic2DType)
+Dynamic2DRobotEnvTypeFeatures[DynTriangleType] = Dynamic2DRobotEnvTypeFeatures[
+    Dynamic2DType
+] + [
+    "length",
+    "height",
+]
 
 # A robot with a circle base, a rectangle gripper_base, and two rectangle grippers.
 # The (x, y, theta) are for the center of the robot base circle. The base_radius
