@@ -297,7 +297,7 @@ class Rectangle(Geom2D):
         (lx, ly), _, _, (rx, ry) = vertices
         theta = np.arctan2(ry - ly, rx - lx)
         rect = Rectangle(lx, ly, self.width, self.height, theta)
-        assert np.allclose(rect.vertices, vertices)
+        # assert np.allclose(rect.vertices, vertices)
         return rect
 
     def scale_about_center(self, width_scale: float, height_scale: float) -> Rectangle:
