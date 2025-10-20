@@ -98,13 +98,16 @@ def state_2d_has_collision(
                 if "static" in state.type_features[obj1.type]
                 else False
             )
+            obj1_static = False if 'obstruction' in obj1.name else obj1_static
             obj2_static = (
                 state.get(obj2, "static")
                 if "static" in state.type_features[obj2.type]
                 else False
             )
+            obj2_static = False if 'obstruction' in obj2.name else obj2_static
             if obj1 == obj2 or (obj1_static and obj2_static):
                 # Skip self-collision and static-static collision.
+                # Obstructions are considered non static for collision checking.
                 continue
             multibody1 = obj_to_multibody[obj1]
             multibody2 = obj_to_multibody[obj2]
