@@ -2,6 +2,7 @@
 
 import os
 import sys
+from pathlib import Path
 
 import gymnasium
 from gymnasium.envs.registration import register
@@ -83,6 +84,33 @@ def register_all_environments() -> None:
             kwargs={"num_obstructions": num_obstruction},
         )
 
+    # DynPushPullStick2D environment with different numbers of obstructions.
+    num_obstructions = [0, 1, 5]
+    for num_obstruction in num_obstructions:
+        _register(
+            id=f"prbench/DynPushPullHook2D-o{num_obstruction}-v0",
+            entry_point="prbench.envs.dynamic2d.dyn_pushpullhook2d:DynPushPullHook2DEnv",
+            kwargs={"num_obstructions": num_obstruction},
+        )
+
+    # DynPushT environment
+    _register(
+        id="prbench/DynPushT-t1-v0",
+        entry_point="prbench.envs.dynamic2d.dyn_pushtee:DynPushTEnv",
+        kwargs={"num_tee": 1},
+    )
+
+    # DynScoopPour environment with different numbers of small objects
+    num_objects = [10, 20, 30, 50]
+    for num_object in num_objects:
+        num_circles = num_object // 2
+        num_squares = num_object - num_circles
+        _register(
+            id=f"prbench/DynScoopPour-o{num_object}-v0",
+            entry_point="prbench.envs.dynamic2d.dyn_scooppour:DynScoopPourEnv",
+            kwargs={"num_small_circles": num_circles, "num_small_squares": num_squares},
+        )
+
     # ******* Geom3D Environments *******
 
     # Motion3D environment.
@@ -102,23 +130,23 @@ def register_all_environments() -> None:
 
     # ******* Dynamic3D Environments *******
 
-    # TidyBot3D environments with different scenes and object counts
-    scene_configs = [
-        ("ground", [3, 5, 7]),  # Ground/scene.xml with different object counts
-        ("table", [3, 5, 7]),  # Table with different object counts
-        ("cupboard", [8]),  # Cupboard environment
-    ]
+    # Tasks with different scenes and object counts
+    tasks_root = Path(__file__).parent / "envs" / "dynamic3d" / "tasks"
 
-    for scene_type, object_counts in scene_configs:
-        for num_objects in object_counts:
-            register(
-                id=f"prbench/TidyBot3D-{scene_type}-o{num_objects}-v0",
-                entry_point="prbench.envs.tidybot.tidybot3d:TidyBot3DEnv",
-                kwargs={
-                    "scene_type": scene_type,
-                    "num_objects": num_objects,
-                },
-            )
+    for task_config in tasks_root.iterdir():
+        config_name = task_config.stem
+        robot = {"tidybot": "TidyBot3D", "rby1a": "RBY1A3D"}[config_name.split("-")[0]]
+        scene_type = config_name.split("-")[1]
+        num_task_objects = int(config_name.split("-")[2][1:])
+        register(
+            id=f"prbench/{robot}-{scene_type}-o{num_task_objects}-v0",
+            entry_point=f"prbench.envs.dynamic3d.tidybot3d:{robot}Env",
+            kwargs={
+                "scene_type": scene_type,
+                "num_objects": num_task_objects,
+                "task_config_path": str(task_config),
+            },
+        )
 
 
 def _register(id: str, *args, **kwargs) -> None:  # pylint: disable=redefined-builtin

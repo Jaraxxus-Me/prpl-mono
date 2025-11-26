@@ -19,6 +19,7 @@ Dynamic2DRobotEnvTypeFeatures[Dynamic2DType] = [
     "vy",
     "omega",
     "static",
+    "held",
     "color_r",
     "color_g",
     "color_b",
@@ -42,21 +43,39 @@ Dynamic2DRobotEnvTypeFeatures[DynRectangleType] = Dynamic2DRobotEnvTypeFeatures[
     "height",
     "mass",
 ]
-# dynamic rtrapezoid
-DynRTrapezoidType = Type("dyn_rtrapezoid", parent=Dynamic2DType)
-Dynamic2DRobotEnvTypeFeatures[DynRTrapezoidType] = Dynamic2DRobotEnvTypeFeatures[
+LObjectType = Type("lobject", parent=Dynamic2DType)
+Dynamic2DRobotEnvTypeFeatures[LObjectType] = Dynamic2DRobotEnvTypeFeatures[
     Dynamic2DType
 ] + [
-    "length",
-    "height",
+    "width",
+    "length_side1",
+    "length_side2",
+    "mass",
 ]
-# dynamic triangle
-DynTriangleType = Type("dyn_triangle", parent=Dynamic2DType)
-Dynamic2DRobotEnvTypeFeatures[DynTriangleType] = Dynamic2DRobotEnvTypeFeatures[
+TObjectType = Type("tobject", parent=Dynamic2DType)
+Dynamic2DRobotEnvTypeFeatures[TObjectType] = Dynamic2DRobotEnvTypeFeatures[
     Dynamic2DType
 ] + [
-    "length",
-    "height",
+    "width",
+    "length_horizontal",
+    "length_vertical",
+    "mass",
+]
+# Small objects for scooping tasks (circles)
+SmallCircleType = Type("small_circle", parent=Dynamic2DType)
+Dynamic2DRobotEnvTypeFeatures[SmallCircleType] = Dynamic2DRobotEnvTypeFeatures[
+    Dynamic2DType
+] + [
+    "radius",
+    "mass",
+]
+# Small objects for scooping tasks (squares)
+SmallSquareType = Type("small_square", parent=Dynamic2DType)
+Dynamic2DRobotEnvTypeFeatures[SmallSquareType] = Dynamic2DRobotEnvTypeFeatures[
+    Dynamic2DType
+] + [
+    "size",  # side length of the square
+    "mass",
 ]
 
 # A robot with a circle base, a rectangle gripper_base, and two rectangle grippers.
@@ -70,9 +89,18 @@ Dynamic2DRobotEnvTypeFeatures[KinRobotType] = [
     "x",
     "y",
     "theta",
-    "vx",
-    "vy",
-    "omega",
+    "vx_base",
+    "vy_base",
+    "omega_base",
+    "vx_arm",
+    "vy_arm",
+    "omega_arm",
+    "vx_gripper_l",
+    "vy_gripper_l",
+    "omega_gripper_l",
+    "vx_gripper_r",
+    "vy_gripper_r",
+    "omega_gripper_r",
     "static",
     "base_radius",
     "arm_joint",
@@ -82,4 +110,21 @@ Dynamic2DRobotEnvTypeFeatures[KinRobotType] = [
     "finger_gap",
     "finger_height",
     "finger_width",
+]
+# A simple dot robot (kinematic circle).
+DotRobotType = Type("dot_robot", parent=Dynamic2DType)
+Dynamic2DRobotEnvTypeFeatures[DotRobotType] = [
+    "x",
+    "y",
+    "theta",
+    "vx",
+    "vy",
+    "omega",
+    "static",
+    "held",
+    "color_r",
+    "color_g",
+    "color_b",
+    "z_order",
+    "radius",
 ]

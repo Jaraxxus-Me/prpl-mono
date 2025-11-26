@@ -10,6 +10,7 @@ from typing import (
     Iterator,
     List,
     Sequence,
+    Set,
 )
 
 import numpy as np
@@ -72,6 +73,10 @@ class ObjectCentricState:
         """Return objects of the given type in the order of __iter__()."""
         return [o for o in self if o.is_instance(object_type)]
 
+    def get_object_names(self) -> Set[str]:
+        """Return the names of all objects in the state."""
+        return set(o.name for o in self)
+
     def get_object_from_name(self, name: str) -> Object:
         """Look up an object from its name."""
         matches = [o for o in self if o.name == name]
@@ -79,15 +84,15 @@ class ObjectCentricState:
             raise ValueError(f"Object '{name}' not found in state")
         return matches[0]
 
-    def vec(self, objects: Sequence[Object]) -> Array:
+    def vec(self, objects: Sequence[Object], dtype: Any = np.float32) -> Array:
         """Concatenated vector of features for each of the objects in the given
         ordered list."""
         feats: List[Array] = []
         if len(objects) == 0:
-            return np.zeros(0, dtype=np.float32)
+            return np.zeros(0, dtype=dtype)
         for obj in objects:
             feats.append(self[obj])
-        return np.hstack(feats).astype(np.float32)
+        return np.hstack(feats).astype(dtype)
 
     @classmethod
     def from_vec(

@@ -1,6 +1,7 @@
 """Base class for Dynamic2D (PyMunk) robot environments."""
 
 import abc
+import logging
 from dataclasses import dataclass
 from typing import Any, Generic, TypeVar
 
@@ -8,6 +9,7 @@ import gymnasium
 import numpy as np
 import pymunk
 from numpy.typing import NDArray
+from pymunk.vec2d import Vec2d
 from relational_structs import (
     Array,
     Object,
@@ -20,7 +22,9 @@ from relational_structs.utils import create_state_from_dict
 from prbench.core import ObjectCentricPRBenchEnv, PRBenchEnvConfig, RobotActionSpace
 from prbench.envs.dynamic2d.object_types import Dynamic2DRobotEnvTypeFeatures
 from prbench.envs.dynamic2d.utils import (
+    ARM_COLLISION_TYPE,
     DYNAMIC_COLLISION_TYPE,
+    FINGER_COLLISION_TYPE,
     ROBOT_COLLISION_TYPE,
     STATIC_COLLISION_TYPE,
     KinRobot,
@@ -77,9 +81,11 @@ class Dynamic2DRobotEnvConfig(PRBenchEnvConfig):
 
     # Physics parameters
     gravity_y: float = -9.8
+    damping: float = 1.0  # Damping applied to all dynamic bodies
     collision_slop: float = 0.001  # Allow small interpenetration, depends on env scale
     control_hz: int = 10  # Control frequency (fps in rendering)
     sim_hz: int = 100  # Simulation frequency (dt in simulation)
+    stabilization_seconds: float = 1.0  # Duration to stabilize physics after reset
 
     # For rendering.
     render_dpi: int = 50
@@ -144,6 +150,7 @@ class ObjectCentricDynamic2DRobotEnv(
         """Set up the PyMunk physics space."""
         self.pymunk_space = pymunk.Space()
         self.pymunk_space.gravity = 0, self.config.gravity_y
+        self.pymunk_space.damping = self.config.damping
         self.pymunk_space.collision_slop = self.config.collision_slop
 
         # Create robot
@@ -159,15 +166,29 @@ class ObjectCentricDynamic2DRobotEnv(
         self.robot.add_to_space(self.pymunk_space)
 
         # Set up collision handlers
+        # Finger grasping handler
         self.pymunk_space.on_collision(
             DYNAMIC_COLLISION_TYPE,
-            ROBOT_COLLISION_TYPE,
+            FINGER_COLLISION_TYPE,
             post_solve=on_gripper_grasp,
+            data=self.robot,
+        )
+        # Static collisions
+        self.pymunk_space.on_collision(
+            STATIC_COLLISION_TYPE,
+            ROBOT_COLLISION_TYPE,
+            pre_solve=on_collision_w_static,
             data=self.robot,
         )
         self.pymunk_space.on_collision(
             STATIC_COLLISION_TYPE,
-            ROBOT_COLLISION_TYPE,
+            FINGER_COLLISION_TYPE,
+            pre_solve=on_collision_w_static,
+            data=self.robot,
+        )
+        self.pymunk_space.on_collision(
+            STATIC_COLLISION_TYPE,
+            ARM_COLLISION_TYPE,
             pre_solve=on_collision_w_static,
             data=self.robot,
         )
@@ -178,15 +199,43 @@ class ObjectCentricDynamic2DRobotEnv(
         robot_base_x = state.get(obj, "x")
         robot_base_y = state.get(obj, "y")
         robot_theta = state.get(obj, "theta")
+        robot_base_vx = state.get(obj, "vx_base")
+        robot_base_vy = state.get(obj, "vy_base")
+        robot_base_omega = state.get(obj, "omega_base")
+        robot_base_vel = (Vec2d(robot_base_vx, robot_base_vy), robot_base_omega)
+
         robot_arm = state.get(obj, "arm_joint")
+        robot_arm_vx = state.get(obj, "vx_arm")
+        robot_arm_vy = state.get(obj, "vy_arm")
+        robot_arm_omega = state.get(obj, "omega_arm")
+        robot_arm_vel = (Vec2d(robot_arm_vx, robot_arm_vy), robot_arm_omega)
+
         robot_gripper = state.get(obj, "finger_gap")
+        robot_gripper_vx = state.get(obj, "vx_gripper_l")
+        robot_gripper_vy = state.get(obj, "vy_gripper_l")
+        robot_gripper_omega = state.get(obj, "omega_gripper_l")
+        robot_gripper_vel_l = (
+            Vec2d(robot_gripper_vx, robot_gripper_vy),
+            robot_gripper_omega,
+        )
+        robot_gripper_vx = state.get(obj, "vx_gripper_r")
+        robot_gripper_vy = state.get(obj, "vy_gripper_r")
+        robot_gripper_omega = state.get(obj, "omega_gripper_r")
+        robot_gripper_vel_r = (
+            Vec2d(robot_gripper_vx, robot_gripper_vy),
+            robot_gripper_omega,
+        )
         assert self.robot is not None, "Robot not initialized"
         self.robot.reset_positions(
             base_x=robot_base_x,
             base_y=robot_base_y,
             base_theta=robot_theta,
+            base_vel=robot_base_vel,
             arm_length=robot_arm,
+            arm_vel=robot_arm_vel,
             gripper_gap=robot_gripper,
+            gripper_vel_l=robot_gripper_vel_l,
+            gripper_vel_r=robot_gripper_vel_r,
         )
 
     @abc.abstractmethod
@@ -256,9 +305,17 @@ class ObjectCentricDynamic2DRobotEnv(
         self._static_object_body_cache = {}
         self._state_obj_to_pymunk_body = {}
 
+        # NOTE: If reset from options, we don't step the simulation
+        # to let things settle.
+        stablize_sim = True
         # For testing purposes only, the options may specify an initial scene.
         if options is not None and "init_state" in options:
             self._current_state = options["init_state"].copy()
+            stablize_sim = False
+            logging.warning(
+                "Resetting dynamic2d with a provided initial state is unstable, \
+                replaying the same action won't produce the same result."
+            )
         # Otherwise, set up the initial scene here.
         else:
             self._current_state = self._sample_initial_state()
@@ -267,11 +324,18 @@ class ObjectCentricDynamic2DRobotEnv(
         self._add_state_to_space(self.full_state)
 
         # Calculate simulation parameters
-        dt = 1.0 / self.config.sim_hz
-        # Stepping physics to let things settle
-        assert self.pymunk_space is not None, "Space not initialized"
-        for _ in range(self.config.sim_hz):
-            self.pymunk_space.step(dt)
+        if stablize_sim:
+            dt = 1.0 / self.config.sim_hz
+            # Stepping physics to let things settle
+            assert self.pymunk_space is not None, "Space not initialized"
+            num_steps = int(self.config.stabilization_seconds * self.config.sim_hz)
+            for _ in range(num_steps):
+                self.pymunk_space.step(dt)
+        else:
+            # reset from given state
+            assert self.pymunk_space is not None, "Space not initialized"
+            for body in list(self.pymunk_space.bodies):
+                self.pymunk_space.reindex_shapes_for_body(body)
 
         observation = self._get_obs()
         info = self._get_info()
@@ -328,6 +392,7 @@ class ObjectCentricDynamic2DRobotEnv(
                 base_ang_vel,
                 gripper_base_vel,
                 finger_vel_l,
+                finger_vel_r,
                 held_obj_vel,
             ) = self.pd_controller.compute_control(
                 self.robot,
@@ -344,6 +409,7 @@ class ObjectCentricDynamic2DRobotEnv(
                 base_ang_vel,
                 gripper_base_vel,
                 finger_vel_l,
+                finger_vel_r,
                 held_obj_vel,
             )
             # Step physics simulation (more fine-grained than control freq)
@@ -382,22 +448,32 @@ class ObjectCentricDynamic2DRobotEnv(
                 if body.id in held_body_ids_shape.keys():
                     # Change to dynamic body
                     kinematic_body = body
-                    points = held_body_ids_shape[body.id].get_vertices()
-                    mass = 1.0  # Assume uniform mass for now
-                    moment = pymunk.moment_for_poly(mass, points, (0, 0))
-                    dynamic_body = pymunk.Body(mass, moment)
+                    mass = self._current_state.get(state_obj, "mass")
+                    shapes = held_body_ids_shape[body.id]
+                    total_moment = 0.0
+                    new_shapes: list[pymunk.Shape] = []
+                    for shape in shapes:
+                        assert isinstance(
+                            shape, pymunk.Poly
+                        ), "Only support polygon shapes for now"
+                        copied_shape = shape.copy()
+                        shape.mass = mass / len(shapes)
+                        total_moment += pymunk.moment_for_poly(
+                            shape.mass, shape.get_vertices()
+                        )
+                        new_shapes.append(copied_shape)
+                    dynamic_body = pymunk.Body(mass, total_moment)
+                    dynamic_body.angle = kinematic_body.angle
                     dynamic_body.position = kinematic_body.position
                     dynamic_body.velocity = kinematic_body.velocity  # Preserve velocity
                     dynamic_body.angular_velocity = kinematic_body.angular_velocity
-                    dynamic_body.angle = kinematic_body.angle
-                    shape = pymunk.Poly(dynamic_body, points)
-                    shape.friction = 1.0
-                    shape.density = 1.0
-                    shape.collision_type = DYNAMIC_COLLISION_TYPE
-                    self.pymunk_space.add(dynamic_body, shape)
-                    self.pymunk_space.remove(
-                        kinematic_body, held_body_ids_shape[body.id]
-                    )
+                    for shape in new_shapes:
+                        shape.body = dynamic_body
+                        shape.friction = 1.0
+                        shape.density = 1.0
+                        shape.collision_type = DYNAMIC_COLLISION_TYPE
+                    self.pymunk_space.add(dynamic_body, *new_shapes)
+                    self.pymunk_space.remove(kinematic_body, *shapes)
                     self._state_obj_to_pymunk_body[state_obj] = dynamic_body
                     held_body_ids_shape.pop(body.id)
             # Then, for any remaining held objects not matched to state objects,
@@ -405,7 +481,7 @@ class ObjectCentricDynamic2DRobotEnv(
             for kin_obj, _, _ in self.robot.held_objects:
                 if kin_obj[0].id in held_body_ids_shape.keys():
                     # Remove any extra objects in hand
-                    self.pymunk_space.remove(kin_obj[0], kin_obj[1])
+                    self.pymunk_space.remove(kin_obj[0], *kin_obj[1])
                     continue
             self.robot.held_objects = []
 
@@ -440,9 +516,7 @@ class ObjectCentricDynamic2DRobotEnv(
             self.config.render_dpi,
         )
 
-    def get_action_from_gui_input(
-        self, gui_input: dict[str, Any]
-    ) -> NDArray[np.float32]:
+    def get_action_from_gui_input(self, gui_input: dict[str, Any]) -> NDArray[Any]:
         """Get the mapping from human inputs to actions."""
         # This will be implemented later
         assert isinstance(self.action_space, KinRobotActionSpace)
