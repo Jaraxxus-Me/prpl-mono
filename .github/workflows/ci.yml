@@ -2,6 +2,10 @@ name: CI Checks
 
 on: [push]
 
+env:
+  # Tell git/uv to NOT download LFS blobs, just keep pointer files
+  GIT_LFS_SKIP_SMUDGE: "1"
+
 jobs:
   autoformat:
     runs-on: ubuntu-latest
@@ -43,5 +47,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - name: Pytest
+        env:
+          MUJOCO_GL: "osmesa"
+          PYOPENGL_PLATFORM: ""
         run: |
           uv run ./run_in_all_packages.sh "pytest tests/"

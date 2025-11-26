@@ -21,12 +21,13 @@ from prbench.envs.dynamic2d.object_types import (
 )
 from prbench.envs.dynamic2d.utils import (
     DYNAMIC_COLLISION_TYPE,
+    ROBOT_COLLISION_TYPE,
     STATIC_COLLISION_TYPE,
     KinRobotActionSpace,
     create_walls_from_world_boundaries,
 )
 from prbench.envs.geom2d.structs import MultiBody2D, SE2Pose, ZOrder
-from prbench.envs.geom2d.utils import is_on
+from prbench.envs.geom2d.utils import is_inside, is_on
 from prbench.envs.utils import PURPLE, sample_se2_pose, state_2d_has_collision
 
 # Define custom object types for the obstruction environment
@@ -196,6 +197,7 @@ class ObjectCentricDynObstruction2DEnv(
             "width": self.config.table_width,
             "height": self.config.table_height,
             "static": True,
+            "held": False,
             "color_r": self.config.table_rgb[0],
             "color_g": self.config.table_rgb[1],
             "color_b": self.config.table_rgb[2],
@@ -286,6 +288,8 @@ class ObjectCentricDynObstruction2DEnv(
             # We use Geom2D collision checker for now, maybe need to update it.
             if state_2d_has_collision(full_state, all_objects, all_objects, {}):
                 continue
+            if self._surface_outside_table(full_state, {}):
+                continue
             return state
 
         raise RuntimeError(f"Failed to sample initial state after {n} attempts")
@@ -307,11 +311,20 @@ class ObjectCentricDynObstruction2DEnv(
         robot = Object("robot", KinRobotType)
         init_state_dict[robot] = {
             "x": robot_pose.x,
-            "vx": 0.0,
             "y": robot_pose.y,
-            "vy": 0.0,
             "theta": robot_pose.theta,
-            "omega": 0.0,
+            "vx_base": 0.0,
+            "vy_base": 0.0,
+            "omega_base": 0.0,
+            "vx_arm": 0.0,
+            "vy_arm": 0.0,
+            "omega_arm": 0.0,
+            "vx_gripper_l": 0.0,
+            "vy_gripper_l": 0.0,
+            "omega_gripper_l": 0.0,
+            "vx_gripper_r": 0.0,
+            "vy_gripper_r": 0.0,
+            "omega_gripper_r": 0.0,
             "static": False,
             "base_radius": self.config.robot_base_radius,
             "arm_joint": self.config.robot_base_radius,
@@ -335,6 +348,7 @@ class ObjectCentricDynObstruction2DEnv(
             "width": target_surface_shape[0],
             "height": target_surface_shape[1],
             "static": True,
+            "held": False,
             "color_r": self.config.target_surface_rgb[0],
             "color_g": self.config.target_surface_rgb[1],
             "color_b": self.config.target_surface_rgb[2],
@@ -353,6 +367,7 @@ class ObjectCentricDynObstruction2DEnv(
             "width": target_block_shape[0],
             "height": target_block_shape[1],
             "static": False,
+            "held": False,
             "mass": self.config.target_block_mass,
             "color_r": self.config.target_block_rgb[0],
             "color_g": self.config.target_block_rgb[1],
@@ -374,6 +389,7 @@ class ObjectCentricDynObstruction2DEnv(
                 "width": obstruction_shape[0],
                 "height": obstruction_shape[1],
                 "static": False,
+                "held": False,
                 "color_r": self.config.obstruction_rgb[0],
                 "color_g": self.config.obstruction_rgb[1],
                 "color_b": self.config.obstruction_rgb[2],
@@ -398,6 +414,10 @@ class ObjectCentricDynObstruction2DEnv(
                 width = state.get(obj, "width")
                 height = state.get(obj, "height")
                 theta = state.get(obj, "theta")
+                vx = state.get(obj, "vx")
+                vy = state.get(obj, "vy")
+                omega = state.get(obj, "omega")
+                held = state.get(obj, "held")
 
                 if (
                     (obj.name == "table")
@@ -420,32 +440,53 @@ class ObjectCentricDynObstruction2DEnv(
                     shape.elasticity = 0.99
                     shape.collision_type = STATIC_COLLISION_TYPE
                     self.pymunk_space.add(b2, shape)
-                    b2.position = x, y
                     b2.angle = theta
+                    b2.position = x, y
                     self._state_obj_to_pymunk_body[obj] = b2
                 else:
-                    # Dynamic objects
+                    # Target block and obstructions
                     mass = state.get(obj, "mass")
-                    moment = pymunk.moment_for_box(mass, (width, height))
-                    body = pymunk.Body()
                     vs = [
                         (-width / 2, -height / 2),
                         (-width / 2, height / 2),
                         (width / 2, height / 2),
                         (width / 2, -height / 2),
                     ]
-                    shape = pymunk.Poly(body, vs)
-                    shape.friction = 1.0
-                    shape.density = 1.0
-                    shape.collision_type = DYNAMIC_COLLISION_TYPE
-                    shape.mass = mass
-                    assert shape.body is not None
-                    shape.body.moment = moment
-                    shape.body.mass = mass
-                    self.pymunk_space.add(body, shape)
-                    body.position = x, y
-                    body.angle = theta
-                    self._state_obj_to_pymunk_body[obj] = body
+
+                    if not held:
+                        # Dynamic objects
+                        moment = pymunk.moment_for_box(mass, (width, height))
+                        body = pymunk.Body()
+                        shape = pymunk.Poly(body, vs)
+                        shape.friction = 1.0
+                        shape.density = 1.0
+                        shape.collision_type = DYNAMIC_COLLISION_TYPE
+                        shape.mass = mass
+                        assert shape.body is not None
+                        shape.body.moment = moment
+                        shape.body.mass = mass
+                        self.pymunk_space.add(body, shape)
+                        body.angle = theta
+                        body.position = x, y
+                        body.velocity = vx, vy
+                        body.angular_velocity = omega
+                        self._state_obj_to_pymunk_body[obj] = body
+                    else:
+                        # Held dynamic objects are treated as kinematic
+                        body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+                        shape = pymunk.Poly(body, vs)
+                        shape.friction = 1.0
+                        shape.density = 1.0
+                        shape.collision_type = ROBOT_COLLISION_TYPE
+                        self.pymunk_space.add(body, shape)
+                        body.angle = theta
+                        body.position = x, y
+                        body.velocity = vx, vy
+                        body.angular_velocity = omega
+                        # Add to robot hand
+                        self._state_obj_to_pymunk_body[obj] = body
+                        assert self.robot is not None, "Robot not initialized"
+                        self.robot.add_to_hand((body, [shape]), mass)
 
     def _read_state_from_space(self) -> None:
         """Read the current state from the PyMunk space."""
@@ -465,11 +506,20 @@ class ObjectCentricDynObstruction2DEnv(
                 state.set(robot_obj, "x", self.robot.base_pose.x)
                 state.set(robot_obj, "y", self.robot.base_pose.y)
                 state.set(robot_obj, "theta", self.robot.base_pose.theta)
-                state.set(robot_obj, "vx", self.robot.base_vel[0].x)
-                state.set(robot_obj, "vy", self.robot.base_vel[0].y)
-                state.set(robot_obj, "omega", self.robot.base_vel[1])
+                state.set(robot_obj, "vx_base", self.robot.base_vel[0].x)
+                state.set(robot_obj, "vy_base", self.robot.base_vel[0].y)
+                state.set(robot_obj, "omega_base", self.robot.base_vel[1])
                 state.set(robot_obj, "arm_joint", self.robot.curr_arm_length)
+                state.set(robot_obj, "vx_arm", self.robot.gripper_base_vel[0].x)
+                state.set(robot_obj, "vy_arm", self.robot.gripper_base_vel[0].y)
+                state.set(robot_obj, "omega_arm", self.robot.gripper_base_vel[1])
                 state.set(robot_obj, "finger_gap", self.robot.curr_gripper)
+                state.set(robot_obj, "vx_gripper_l", self.robot.finger_vel_l[0].x)
+                state.set(robot_obj, "vy_gripper_l", self.robot.finger_vel_l[0].y)
+                state.set(robot_obj, "omega_gripper_l", self.robot.finger_vel_l[1])
+                state.set(robot_obj, "vx_gripper_r", self.robot.finger_vel_r[0].x)
+                state.set(robot_obj, "vy_gripper_r", self.robot.finger_vel_r[0].y)
+                state.set(robot_obj, "omega_gripper_r", self.robot.finger_vel_r[1])
             else:
                 assert (
                     obj in self._state_obj_to_pymunk_body
@@ -482,6 +532,12 @@ class ObjectCentricDynObstruction2DEnv(
                 state.set(obj, "vx", pymunk_body.velocity.x)
                 state.set(obj, "vy", pymunk_body.velocity.y)
                 state.set(obj, "omega", pymunk_body.angular_velocity)
+                # Update held status
+                assert self.robot is not None, "Robot not initialized"
+                if self.robot.body_in_hand(pymunk_body.id):
+                    state.set(obj, "held", True)
+                else:
+                    state.set(obj, "held", False)
 
         # Update the current state
         self._current_state = state
@@ -502,6 +558,28 @@ class ObjectCentricDynObstruction2DEnv(
         assert len(target_surfaces) == 1
         target_surface = target_surfaces[0]
         return is_on(state, target_object, target_surface, static_object_body_cache)
+
+    def _surface_outside_table(
+        self,
+        state: ObjectCentricState,
+        static_object_body_cache: dict[Object, MultiBody2D],
+    ) -> bool:
+        """Check if the target surface is outside the table boundaries."""
+        target_surfaces = state.get_objects(TargetSurfaceType)
+        assert len(target_surfaces) == 1
+        target_surface = target_surfaces[0]
+        table = state.get_objects(KinRectangleType)
+        table = [obj for obj in table if obj.name == "table"]
+        assert len(table) == 1
+        table_instance = table[0]
+
+        is_inside_table = is_inside(
+            state,
+            target_surface,
+            table_instance,
+            static_object_body_cache,
+        )
+        return not is_inside_table
 
     def _get_reward_and_done(self) -> tuple[float, bool]:
         """Calculate reward and termination."""

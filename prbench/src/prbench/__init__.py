@@ -83,42 +83,32 @@ def register_all_environments() -> None:
             kwargs={"num_obstructions": num_obstruction},
         )
 
-    # ******* Geom3D Environments *******
-
-    # Motion3D environment.
-    _register(
-        id="prbench/Motion3D-v0",
-        entry_point="prbench.envs.geom3d.motion3d:Motion3DEnv",
-    )
-
-    # Obstructions3D environment with different numbers of obstructions.
-    num_obstructions = [0, 1, 2, 3, 4]
+    # DynPushPullStick2D environment with different numbers of obstructions.
+    num_obstructions = [0, 1, 5]
     for num_obstruction in num_obstructions:
         _register(
-            id=f"prbench/Obstruction3D-o{num_obstruction}-v0",
-            entry_point="prbench.envs.geom3d.obstruction3d:Obstruction3DEnv",
+            id=f"prbench/DynPushPullHook2D-o{num_obstruction}-v0",
+            entry_point="prbench.envs.dynamic2d.dyn_pushpullhook2d:DynPushPullHook2DEnv",
             kwargs={"num_obstructions": num_obstruction},
         )
 
-    # ******* Dynamic3D Environments *******
+    # DynPushT environment
+    _register(
+        id="prbench/DynPushT-t1-v0",
+        entry_point="prbench.envs.dynamic2d.dyn_pushtee:DynPushTEnv",
+        kwargs={"num_tee": 1},
+    )
 
-    # TidyBot3D environments with different scenes and object counts
-    scene_configs = [
-        ("ground", [3, 5, 7]),  # Ground/scene.xml with different object counts
-        ("table", [3, 5, 7]),  # Table with different object counts
-        ("cupboard", [8]),  # Cupboard environment
-    ]
-
-    for scene_type, object_counts in scene_configs:
-        for num_objects in object_counts:
-            register(
-                id=f"prbench/TidyBot3D-{scene_type}-o{num_objects}-v0",
-                entry_point="prbench.envs.tidybot.tidybot3d:TidyBot3DEnv",
-                kwargs={
-                    "scene_type": scene_type,
-                    "num_objects": num_objects,
-                },
-            )
+    # DynScoopPour environment with different numbers of small objects
+    num_objects = [10, 20, 30, 50]
+    for num_object in num_objects:
+        num_circles = num_object // 2
+        num_squares = num_object - num_circles
+        _register(
+            id=f"prbench/DynScoopPour-o{num_object}-v0",
+            entry_point="prbench.envs.dynamic2d.dyn_scooppour:DynScoopPourEnv",
+            kwargs={"num_small_circles": num_circles, "num_small_squares": num_squares},
+        )
 
 
 def _register(id: str, *args, **kwargs) -> None:  # pylint: disable=redefined-builtin

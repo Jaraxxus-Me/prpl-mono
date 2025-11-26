@@ -11,21 +11,28 @@ from relational_structs import (
     Object,
     ObjectCentricState,
 )
-from tomsgeoms2d.structs import Circle, Geom2D, Lobject, Rectangle
+from tomsgeoms2d.structs import Circle, Geom2D, Lobject, Rectangle, Tobject
 from tomsgeoms2d.utils import geom2ds_intersect
 
 from prbench.envs.dynamic2d.object_types import (
+    DotRobotType,
     DynRectangleType,
-    DynTriangleType,
-    DynRTrapezoidType,
     KinRectangleType,
     KinRobotType,
+)
+from prbench.envs.dynamic2d.object_types import LObjectType as LObjectTypeDyn
+from prbench.envs.dynamic2d.object_types import (
+    SmallCircleType,
+    SmallSquareType,
+    TObjectType,
 )
 from prbench.envs.geom2d.object_types import (
     CircleType,
     CRVRobotType,
     DoubleRectType,
-    LObjectType,
+)
+from prbench.envs.geom2d.object_types import LObjectType as LObjectTypeGeom
+from prbench.envs.geom2d.object_types import (
     RectangleType,
 )
 from prbench.envs.geom2d.structs import (
@@ -39,6 +46,7 @@ from prbench.envs.geom2d.structs import (
 PURPLE: tuple[float, float, float] = (128 / 255, 0 / 255, 128 / 255)
 BLACK: tuple[float, float, float] = (0.1, 0.1, 0.1)
 BROWN: tuple[float, float, float] = (0.4, 0.2, 0.1)
+ORANGE: tuple[float, float, float] = (1.0, 165 / 255, 0.0)
 
 
 class RobotActionSpace(Box):
@@ -98,13 +106,13 @@ def state_2d_has_collision(
                 if "static" in state.type_features[obj1.type]
                 else False
             )
-            obj1_static = False if 'obstruction' in obj1.name else obj1_static
+            obj1_static = False if "obstruction" in obj1.name else obj1_static
             obj2_static = (
                 state.get(obj2, "static")
                 if "static" in state.type_features[obj2.type]
                 else False
             )
-            obj2_static = False if 'obstruction' in obj2.name else obj2_static
+            obj2_static = False if "obstruction" in obj2.name else obj2_static
             if obj1 == obj2 or (obj1_static and obj2_static):
                 # Skip self-collision and static-static collision.
                 # Obstructions are considered non static for collision checking.
@@ -195,7 +203,7 @@ def kin_robot_to_multibody2d(obj: Object, state: ObjectCentricState) -> MultiBod
         y=base_y,
         radius=base_radius,
     )
-    z_order = ZOrder.ALL
+    z_order = ZOrder.SURFACE
     rendering_kwargs = {"facecolor": PURPLE, "edgecolor": BLACK}
     base = Body2D(circ, z_order, rendering_kwargs, name="base")
     bodies.append(base)
@@ -214,7 +222,7 @@ def kin_robot_to_multibody2d(obj: Object, state: ObjectCentricState) -> MultiBod
         width=gripper_base_width,
         rotation_about_center=theta,
     )
-    z_order = ZOrder.ALL
+    z_order = ZOrder.SURFACE
     rendering_kwargs = {"facecolor": PURPLE, "edgecolor": BLACK}
     gripper_base = Body2D(rect, z_order, rendering_kwargs, name="gripper_base")
     gripper_base_pose = SE2Pose(
@@ -238,15 +246,15 @@ def kin_robot_to_multibody2d(obj: Object, state: ObjectCentricState) -> MultiBod
         width=state.get(obj, "arm_length"),
         rotation_about_center=theta,
     )
-    z_order = ZOrder.ALL
+    z_order = ZOrder.SURFACE
     rendering_kwargs = {"facecolor": PURPLE, "edgecolor": BLACK}
     arm = Body2D(rect, z_order, rendering_kwargs, name="arm")
     bodies.append(arm)
 
     # Fingers
     relative_dx = state.get(obj, "finger_width") / 2
-    relative_dy_r = -gripper_base_height / 2
-    relative_dy_l = state.get(obj, "finger_gap") - gripper_base_height / 2
+    relative_dy_r = -state.get(obj, "finger_gap") / 2
+    relative_dy_l = state.get(obj, "finger_gap") / 2
     finger_r_pose = gripper_base_pose * SE2Pose(
         x=relative_dx,
         y=relative_dy_r,
@@ -271,7 +279,7 @@ def kin_robot_to_multibody2d(obj: Object, state: ObjectCentricState) -> MultiBod
         width=state.get(obj, "finger_width"),
         rotation_about_center=finger_l_pose.theta,
     )
-    z_order = ZOrder.ALL
+    z_order = ZOrder.SURFACE
     rendering_kwargs = {"facecolor": PURPLE, "edgecolor": BLACK}
     finger_l_body = Body2D(finger_r, z_order, rendering_kwargs, name="arm")
     bodies.append(finger_l_body)
@@ -363,7 +371,7 @@ def geom2d_lobject_to_multibody2d(
     obj: Object, state: ObjectCentricState
 ) -> MultiBody2D:
     """Helper to create a MultiBody2D for an LObjectType object."""
-    assert obj.is_instance(LObjectType)
+    assert obj.is_instance(LObjectTypeGeom) or obj.is_instance(LObjectTypeDyn)
     # Get parameters
     x = state.get(obj, "x")
     y = state.get(obj, "y")
@@ -489,6 +497,71 @@ def double_rectangle_object_to_part_geom(
     return geom
 
 
+def dot_robot_to_multibody2d(obj: Object, state: ObjectCentricState) -> MultiBody2D:
+    """Helper for object_to_multibody2d() for DotRobotType."""
+    assert obj.is_instance(DotRobotType)
+    bodies: list[Body2D] = []
+
+    # Simple circle robot
+    x = state.get(obj, "x")
+    y = state.get(obj, "y")
+    radius = state.get(obj, "radius")
+    circ = Circle(x=x, y=y, radius=radius)
+    z_order = ZOrder.ALL
+    rendering_kwargs = {
+        "facecolor": (50 / 255, 50 / 255, 255 / 255),
+        "edgecolor": BLACK,
+    }
+    base_body = Body2D(
+        geom=circ,
+        z_order=z_order,
+        rendering_kwargs=rendering_kwargs,
+        name="base",
+    )
+    bodies.append(base_body)
+
+    return MultiBody2D(name=obj.name, bodies=bodies)
+
+
+def tobject_to_multibody2d(obj: Object, state: ObjectCentricState) -> MultiBody2D:
+    """Helper for object_to_multibody2d() for TObjectType."""
+    assert obj.is_instance(TObjectType)
+
+    # Get parameters
+    x = state.get(obj, "x")
+    y = state.get(obj, "y")
+    theta = state.get(obj, "theta")
+    width = state.get(obj, "width")
+    length_horizontal = state.get(obj, "length_horizontal")
+    length_vertical = state.get(obj, "length_vertical")
+    color = (
+        state.get(obj, "color_r"),
+        state.get(obj, "color_g"),
+        state.get(obj, "color_b"),
+    )
+
+    # Create Tobject geometry
+    tobject_geom = Tobject(
+        x=x,
+        y=y,
+        width=width,
+        length_horizontal=length_horizontal,
+        length_vertical=length_vertical,
+        theta=theta,
+    )
+
+    z_order = ZOrder(int(state.get(obj, "z_order")))
+    rendering_kwargs = {"facecolor": color, "edgecolor": BLACK}
+    body = Body2D(
+        geom=tobject_geom,
+        z_order=z_order,
+        rendering_kwargs=rendering_kwargs,
+        name="root",
+    )
+
+    return MultiBody2D(name=obj.name, bodies=[body])
+
+
 def object_to_multibody2d(
     obj: Object,
     state: ObjectCentricState,
@@ -499,6 +572,10 @@ def object_to_multibody2d(
         return crv_robot_to_multibody2d(obj, state)
     if obj.is_instance(KinRobotType):
         return kin_robot_to_multibody2d(obj, state)
+    if obj.is_instance(DotRobotType):
+        return dot_robot_to_multibody2d(obj, state)
+    if obj.is_instance(TObjectType):
+        return tobject_to_multibody2d(obj, state)
     is_static = state.get(obj, "static") > 0.5
     if is_static and obj in static_object_cache:
         return static_object_cache[obj]
@@ -556,15 +633,46 @@ def object_to_multibody2d(
         }
         body = Body2D(geom, z_order, rendering_kwargs)
         multibody = MultiBody2D(obj.name, [body])
-    elif obj.is_instance(LObjectType):
+    elif obj.is_instance(LObjectTypeDyn) or obj.is_instance(LObjectTypeGeom):
         multibody = geom2d_lobject_to_multibody2d(obj, state)
     elif obj.is_instance(DoubleRectType):
         multibody = geom2d_double_rectangle_to_multibody2d(obj, state)
-    elif obj.is_instance(DynRTrapezoidType):
-        multibody = rtrapezoid_to_multibody2d(obj, state)
-    elif obj.is_instance(DynTriangleType):
-        # Treat as a DynRTrapezoid with length_side2 = 0.
-        multibody = dyntriangle_to_multibody2d(obj, state)
+    elif obj.is_instance(SmallCircleType):
+        # Small circle objects (for scoop-pour tasks)
+        x = state.get(obj, "x")
+        y = state.get(obj, "y")
+        radius = state.get(obj, "radius")
+        geom = Circle(x, y, radius)
+        z_order = ZOrder(int(state.get(obj, "z_order")))
+        rendering_kwargs = {
+            "facecolor": (
+                state.get(obj, "color_r"),
+                state.get(obj, "color_g"),
+                state.get(obj, "color_b"),
+            ),
+            "edgecolor": BLACK,
+        }
+        body = Body2D(geom, z_order, rendering_kwargs)
+        multibody = MultiBody2D(obj.name, [body])
+    elif obj.is_instance(SmallSquareType):
+        # Small square objects (for scoop-pour tasks)
+        x = state.get(obj, "x")
+        y = state.get(obj, "y")
+        size = state.get(obj, "size")
+        theta = state.get(obj, "theta")
+        # Use from_center for squares
+        geom = Rectangle.from_center(x, y, size, size, theta)
+        z_order = ZOrder(int(state.get(obj, "z_order")))
+        rendering_kwargs = {
+            "facecolor": (
+                state.get(obj, "color_r"),
+                state.get(obj, "color_g"),
+                state.get(obj, "color_b"),
+            ),
+            "edgecolor": BLACK,
+        }
+        body = Body2D(geom, z_order, rendering_kwargs)
+        multibody = MultiBody2D(obj.name, [body])
     else:
         raise NotImplementedError
     if is_static:
@@ -588,83 +696,3 @@ def rectangle_object_to_geom(
     geom = multibody.bodies[0].geom
     assert isinstance(geom, Rectangle)
     return geom
-
-def rtrapezoid_to_multibody2d(
-    obj: Object,
-    state: ObjectCentricState,
-) -> MultiBody2D:
-    """Helper to create a MultiBody2D for a DynRTrapezoidType object."""
-    assert obj.is_instance(DynRTrapezoidType)
-    # Get parameters
-    x = state.get(obj, "x")
-    y = state.get(obj, "y")
-    theta = state.get(obj, "theta")
-    length = state.get(obj, "length")
-    height = state.get(obj, "height")
-    color = (
-        state.get(obj, "color_r"),
-        state.get(obj, "color_g"),
-        state.get(obj, "color_b"),
-    )
-    z_order = ZOrder(int(state.get(obj, "z_order")))
-
-    from tomsgeoms2d.structs import RTrapezoid
-
-    geom = RTrapezoid(x, y, length, height, theta)
-
-    rendering_kwargs = {
-        "facecolor": color,
-        "edgecolor": BLACK,
-    }
-    body = Body2D(geom, z_order, rendering_kwargs, name="rtrapezoid")
-
-    return MultiBody2D(obj.name, [body])
-
-def dyntriangle_to_multibody2d(
-    obj: Object,
-    state: ObjectCentricState,
-) -> MultiBody2D:
-    """Helper to create a MultiBody2D for a DynTriangleType object.
-    The triangle has a right angle at the vertex (x,y), when theta=0 it looks like:
-        |\
-        | \
-        |  \
-        |   \
-        |____\
-    The x1,y1 vertex is at (x,y).
-    The x2,y2 vertex is at (x+length,y).
-    The x3,y3 vertex is at (x,y+height).
-    When theta != 0, the triangle is rotated counter-clockwise by theta around (x,y).
-    
-    """
-    assert obj.is_instance(DynTriangleType)
-    # Get parameters
-    x = state.get(obj, "x")
-    y = state.get(obj, "y")
-    theta = state.get(obj, "theta")
-    width = state.get(obj, "width")
-    height = state.get(obj, "height")
-    color = (
-        state.get(obj, "color_r"),
-        state.get(obj, "color_g"),
-        state.get(obj, "color_b"),
-    )
-    z_order = ZOrder(int(state.get(obj, "z_order")))
-
-    from tomsgeoms2d.structs import Triangle
-
-    x1 = x
-    y1 = y
-    x2 = x + width * np.cos(theta)
-    y2 = y + width * np.sin(theta)
-    x3 = x + height * np.cos(theta + np.pi / 2)
-    y3 = y + height * np.sin(theta + np.pi / 2)
-    geom = Triangle(x1, y1, x2, y2, x3, y3)
-
-    rendering_kwargs = {
-        "facecolor": color,
-        "edgecolor": BLACK,
-    }
-    body = Body2D(geom, z_order, rendering_kwargs, name="triangle")
-
-    return MultiBody2D(obj.name, [body])
