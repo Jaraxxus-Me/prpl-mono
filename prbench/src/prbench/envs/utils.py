@@ -17,8 +17,6 @@ from tomsgeoms2d.utils import geom2ds_intersect
 from prbench.envs.dynamic2d.object_types import (
     DotRobotType,
     DynRectangleType,
-    DynTriangleType,
-    DynRTrapezoidType,
     KinRectangleType,
     KinRobotType,
 )
@@ -108,13 +106,13 @@ def state_2d_has_collision(
                 if "static" in state.type_features[obj1.type]
                 else False
             )
-            obj1_static = False if 'obstruction' in obj1.name else obj1_static
+            obj1_static = False if "obstruction" in obj1.name else obj1_static
             obj2_static = (
                 state.get(obj2, "static")
                 if "static" in state.type_features[obj2.type]
                 else False
             )
-            obj2_static = False if 'obstruction' in obj2.name else obj2_static
+            obj2_static = False if "obstruction" in obj2.name else obj2_static
             if obj1 == obj2 or (obj1_static and obj2_static):
                 # Skip self-collision and static-static collision.
                 # Obstructions are considered non static for collision checking.
@@ -698,83 +696,3 @@ def rectangle_object_to_geom(
     geom = multibody.bodies[0].geom
     assert isinstance(geom, Rectangle)
     return geom
-
-def rtrapezoid_to_multibody2d(
-    obj: Object,
-    state: ObjectCentricState,
-) -> MultiBody2D:
-    """Helper to create a MultiBody2D for a DynRTrapezoidType object."""
-    assert obj.is_instance(DynRTrapezoidType)
-    # Get parameters
-    x = state.get(obj, "x")
-    y = state.get(obj, "y")
-    theta = state.get(obj, "theta")
-    length = state.get(obj, "length")
-    height = state.get(obj, "height")
-    color = (
-        state.get(obj, "color_r"),
-        state.get(obj, "color_g"),
-        state.get(obj, "color_b"),
-    )
-    z_order = ZOrder(int(state.get(obj, "z_order")))
-
-    from tomsgeoms2d.structs import RTrapezoid
-
-    geom = RTrapezoid(x, y, length, height, theta)
-
-    rendering_kwargs = {
-        "facecolor": color,
-        "edgecolor": BLACK,
-    }
-    body = Body2D(geom, z_order, rendering_kwargs, name="rtrapezoid")
-
-    return MultiBody2D(obj.name, [body])
-
-def dyntriangle_to_multibody2d(
-    obj: Object,
-    state: ObjectCentricState,
-) -> MultiBody2D:
-    """Helper to create a MultiBody2D for a DynTriangleType object.
-    The triangle has a right angle at the vertex (x,y), when theta=0 it looks like:
-        |\
-        | \
-        |  \
-        |   \
-        |____\
-    The x1,y1 vertex is at (x,y).
-    The x2,y2 vertex is at (x+length,y).
-    The x3,y3 vertex is at (x,y+height).
-    When theta != 0, the triangle is rotated counter-clockwise by theta around (x,y).
-    
-    """
-    assert obj.is_instance(DynTriangleType)
-    # Get parameters
-    x = state.get(obj, "x")
-    y = state.get(obj, "y")
-    theta = state.get(obj, "theta")
-    width = state.get(obj, "width")
-    height = state.get(obj, "height")
-    color = (
-        state.get(obj, "color_r"),
-        state.get(obj, "color_g"),
-        state.get(obj, "color_b"),
-    )
-    z_order = ZOrder(int(state.get(obj, "z_order")))
-
-    from tomsgeoms2d.structs import Triangle
-
-    x1 = x
-    y1 = y
-    x2 = x + width * np.cos(theta)
-    y2 = y + width * np.sin(theta)
-    x3 = x + height * np.cos(theta + np.pi / 2)
-    y3 = y + height * np.sin(theta + np.pi / 2)
-    geom = Triangle(x1, y1, x2, y2, x3, y3)
-
-    rendering_kwargs = {
-        "facecolor": color,
-        "edgecolor": BLACK,
-    }
-    body = Body2D(geom, z_order, rendering_kwargs, name="triangle")
-
-    return MultiBody2D(obj.name, [body])

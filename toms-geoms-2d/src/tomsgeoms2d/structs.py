@@ -494,9 +494,7 @@ class RTrapezoid(Geom2D):
         # New origin = desired_center - rotated_local_center
         new_origin = center_vector - rotated_center
 
-        return RTrapezoid(
-            new_origin[0], new_origin[1], new_l, new_h, self.theta
-        )
+        return RTrapezoid(new_origin[0], new_origin[1], new_l, new_h, self.theta)
 
     def plot(self, ax: plt.Axes, **kwargs: Any) -> None:
         """Plot the trapezoid as a polygon patch."""
