@@ -16,6 +16,7 @@ from tomsgeoms2d.utils import geom2ds_intersect
 
 from prbench.envs.dynamic2d.object_types import (
     DotRobotType,
+    CarRobotType,
     DynRectangleType,
     KinRectangleType,
     KinRobotType,
@@ -576,6 +577,21 @@ def object_to_multibody2d(
         return dot_robot_to_multibody2d(obj, state)
     if obj.is_instance(TObjectType):
         return tobject_to_multibody2d(obj, state)
+    if obj.is_instance(CarRobotType):
+        x = state.get(obj, "x")
+        y = state.get(obj, "y")
+        width = state.get(obj, "width")
+        height = state.get(obj, "height")
+        theta = state.get(obj, "theta")
+        # Different from RectangleType, use from_center.
+        geom = Rectangle.from_center(x, y, width, height, theta)
+        z_order = ZOrder(int(state.get(obj, "z_order")))
+        rendering_kwargs = {
+            "facecolor": PURPLE,
+            "edgecolor": BLACK,
+        }
+        body = Body2D(geom, z_order, rendering_kwargs)
+        return MultiBody2D(obj.name, [body])
     is_static = state.get(obj, "static") > 0.5
     if is_static and obj in static_object_cache:
         return static_object_cache[obj]

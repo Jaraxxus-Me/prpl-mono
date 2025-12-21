@@ -144,6 +144,8 @@ Dynamic2DRobotEnvTypeFeatures[CarRobotType] = [
     "vx_base",
     "vy_base",
     "omega_base",
+    "width",
+    "height",
     "fx",
     "fy",
     "torque",

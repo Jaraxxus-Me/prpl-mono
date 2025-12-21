@@ -360,6 +360,11 @@ class CarRobot:
             self._base_body.torque / self._base_body.moment
 
     @property
+    def base_force(self) -> tuple[Vec2d, float]:
+        """Get the base linear and angular force."""
+        return self._base_body.force, self._base_body.torque
+
+    @property
     def body_id(self) -> int:
         """Get the base id in pymunk space."""
         return self._base_body.id
