@@ -77,6 +77,47 @@ class KinRobotActionSpace(RobotActionSpace):
         )
 
 
+class CarRobotActionSpace(RobotActionSpace):
+    """An action space for a car robot with force and steering control.
+    """
+
+    def __init__(
+        self,
+        min_fx: float = -2.0,
+        max_fx: float = 2.0,
+        min_fy: float = -2.0,
+        max_fy: float = 2.0,
+        min_fsteer: float = -0.5,
+        max_fsteer: float = 0.5,
+    ) -> None:
+        low = np.array([min_fx, min_fy, min_fsteer])
+        high = np.array([max_fx, max_fy, max_fsteer])
+        super().__init__(low, high, dtype=np.float64)
+
+    def create_markdown_description(self) -> str:
+        """Create a human-readable markdown description of this space."""
+        features = [
+            ("dx", "Change in robot x position (positive is right)"),
+            ("dy", "Change in robot y position (positive is up)"),
+            ("dtheta", "Change in robot angle in radians (positive is ccw)"),
+            ("darm", "Change in robot arm length (positive is out)"),
+            ("dgripper", "Change in gripper gap (positive is open)"),
+        ]
+        md_table_str = (
+            "| **Index** | **Feature** | **Description** | **Min** | **Max** |"
+        )
+        md_table_str += "\n| --- | --- | --- | --- | --- |"
+        for idx, (feature, description) in enumerate(features):
+            lb = self.low[idx]
+            ub = self.high[idx]
+            md_table_str += (
+                f"\n| {idx} | {feature} | {description} | {lb:.3f} | {ub:.3f} |"
+            )
+        return (
+            f"The entries of an array in this Box space correspond to the "
+            f"following action features:\n{md_table_str}\n"
+        )
+
 class DotRobotActionSpace(RobotActionSpace):
     """An action space for a simple dot robot (kinematic circle).
 
@@ -244,6 +285,188 @@ class DotRobotPDController:
 
         return new_vel
 
+class CarRobot:
+    """Robot implementation using PyMunk physics engine with a rectangular base.
+
+    The robot can be controlled via applying forces to the base and steering.
+
+    The robot can hold objects by keeping them in contact with the base.
+
+    The robot will be revert to the last valid state when colliding with static objects.
+    """
+
+    def __init__(
+        self,
+        init_pos: Vec2d = Vec2d(5.0, 5.0),
+        base_width: float = 0.4,
+        base_length: float = 0.6,
+        mass: float = 1.0,
+        base_collision_type: int = ROBOT_COLLISION_TYPE,
+    ) -> None:
+        # Robot parameters
+        self.base_width = base_width
+        self.base_length = base_length
+        self.base_collision_type = base_collision_type
+        self.base_mass = mass
+
+        # Track last robot state
+        self._base_position = init_pos
+        self._base_angle = 0.0
+        self.held_objects: list[tuple[tuple[Body, list[Shape]], float, SE2Pose]] = []
+
+        # Body and shape references
+        self.create_base()
+
+    def add_to_space(self, space: pymunk.Space) -> None:
+        """Add robot components to the PyMunk space."""
+        space.add(self._base_body, self._base_shape)
+
+    def create_base(self) -> None:
+        """Create the robot base."""
+        self._base_body = pymunk.Body(body_type=pymunk.Body.DYNAMIC)
+        half_w = self.base_width / 2
+        half_h = self.base_length / 2
+        vs = [
+            (-half_w, half_h),
+            (-half_w, -half_h),
+            (half_w, -half_h),
+            (half_w, half_h),
+        ]
+        self._base_shape = pymunk.Poly(self._base_body, vs)
+        self._base_shape.friction = 1
+        self._base_shape.collision_type = self.base_collision_type
+        self._base_shape.density = 1.0
+        self._base_shape.mass = self.base_mass
+        self._base_body.angle = self._base_angle
+        self._base_body.position = self._base_position
+
+    @property
+    def base_pose(self) -> SE2Pose:
+        """Get the base pose as SE2Pose."""
+        return SE2Pose(
+            x=self._base_body.position.x,
+            y=self._base_body.position.y,
+            theta=self._base_body.angle,
+        )
+
+    @property
+    def base_vel(self) -> tuple[Vec2d, float]:
+        """Get the base linear and angular velocity."""
+        return self._base_body.velocity, self._base_body.angular_velocity
+    
+    @property
+    def base_acc(self) -> tuple[Vec2d, float]:
+        """Get the base linear and angular acceleration."""
+        return self._base_body.force / self._base_body.mass, \
+            self._base_body.torque / self._base_body.moment
+
+    @property
+    def held_object_vels(self) -> list[tuple[Vec2d, float]]:
+        """Get the held object linear and angular velocity."""
+        vel_list = []
+        for obj, _, _ in self.held_objects:
+            obj_body, _ = obj
+            vel_list.append((obj_body.velocity, obj_body.angular_velocity))
+        return vel_list
+
+    @property
+    def body_id(self) -> int:
+        """Get the base id in pymunk space."""
+        return self._base_body.id
+
+    def reset_positions(
+        self,
+        base_x: float,
+        base_y: float,
+        base_theta: float,
+        base_vel: tuple[Vec2d, float],
+        helder_object_vels: list[Vec2d] | None = None,
+    ) -> None:
+        """Reset robot to specified positions with zero velocity."""
+        self._base_body.angle = base_theta
+        self._base_body.angular_velocity = base_vel[1]
+        self._base_body.position = (base_x, base_y)
+        self._base_body.velocity = base_vel[0]
+
+        # Reset held objects - they have the same velocity as gripper base
+        if helder_object_vels is not None and len(helder_object_vels):
+            assert len(helder_object_vels) == len(
+                self.held_objects
+            ), "Length of helder_object_vels must match the number of held objects."
+            for i, (obj, _, relative_pose) in enumerate(self.held_objects):
+                obj_body, _ = obj
+                new_obj_pose = self.base_pose * relative_pose
+                obj_body.angle = new_obj_pose.theta
+                obj_body.position = (new_obj_pose.x, new_obj_pose.y)
+                obj_body.velocity = helder_object_vels[i]
+                obj_body.angular_velocity = self._base_body.angular_velocity
+
+        # Update last state
+        self.update_last_state()
+
+    def revert_to_last_state(self) -> None:
+        """Reset to last state and stay static when collide with static objects."""
+        self._base_body.angle = self._base_angle
+        self._base_body.position = self._base_position
+        self._base_body.velocity = Vec2d(0.0, 0.0)
+        self._base_body.angular_velocity = 0.0
+
+        # Update held objects
+        for obj, _, relative_pose in self.held_objects:
+            obj_body, _ = obj
+            new_obj_pose = self.base_pose * relative_pose
+            obj_body.angle = new_obj_pose.theta
+            obj_body.position = (new_obj_pose.x, new_obj_pose.y)
+            obj_body.velocity = Vec2d(0.0, 0.0)
+            obj_body.angular_velocity = 0.0
+
+
+    def update_last_state(self) -> None:
+        """Update the last state tracking variables."""
+        self._base_position = Vec2d(
+            self._base_body.position.x, self._base_body.position.y
+        )
+        self._base_angle = self._base_body.angle
+
+
+    def update(
+        self,
+        base_force: Vec2d,
+        steering_force: float,
+    ) -> None:
+        """Update the body velocities."""
+        # Update robot last state
+        self.update_last_state()
+        # Update velocities
+        self._base_body.apply_force_at_local_point(base_force, (0, 0))
+        self._base_body.apply_force_at_local_point(
+            Vec2d(0, steering_force), (0, self.base_length / 2)
+        )
+
+        # Update held objects - they have the same velocity as gripper base
+        for i, (obj, _, _) in enumerate(self.held_objects):
+            obj_body, _ = obj
+            obj_body.velocity = self._base_body.velocity
+            obj_body.angular_velocity = self._base_body.angular_velocity
+
+    def add_to_cart(self, obj: tuple[Body, list[Shape]], space: pymunk.Space, mass: float) -> None:
+        """Add an object to the robot's hand."""
+        obj_body, _ = obj
+        obj_pose = SE2Pose(
+            x=obj_body.position.x, y=obj_body.position.y, theta=obj_body.angle
+        )
+        relative_obj_pose = self.base_pose.inverse * obj_pose
+        self.held_objects.append((obj, mass, relative_obj_pose))
+        dummy_shape = pymunk.Circle(self._base_body, 0.01)
+        dummy_shape.mass = mass
+        space.add(dummy_shape)
+
+    def body_in_cart(self, body_id: int) -> bool:
+        """Check if a body is in the robot's hand."""
+        for (obj_body, _), _, _ in self.held_objects:
+            if obj_body.id == body_id:
+                return True
+        return False
 
 class KinRobot:
     """Robot implementation using PyMunk physics engine with four bodies.
@@ -906,6 +1129,39 @@ def on_collision_w_static(
     del space
     robot.revert_to_last_state()
 
+def on_collision_w_static_car(
+    arbiter: pymunk.Arbiter, space: pymunk.Space, robot: CarRobot
+) -> None:
+    """Collision callback for robot colliding with dynamic objects.
+        Directly add it to hand.
+    """
+    del arbiter
+    del space
+    robot.revert_to_last_state()
+
+def on_collision_w_object_car(
+    arbiter: pymunk.Arbiter, space: pymunk.Space, robot: CarRobot
+) -> None:
+    """Collision callback for robot colliding with dynamic objects."""
+    dynamic_body = arbiter.bodies[0]
+    # Create a new kinematic object
+    kinematic_body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+    kinematic_body.position = dynamic_body.position
+    kinematic_body.angle = dynamic_body.angle
+    shapes = dynamic_body.shapes
+    new_shapes: list[Shape] = []
+    for shape in shapes:
+        copied_shape = shape.copy()
+        copied_shape.body = kinematic_body
+        # Held objects are considered part of the robot for collision purposes
+        # NOTE: Reset with this has not being tested to pass yet
+        # copied_shape.collision_type = ROBOT_COLLISION_TYPE
+        new_shapes.append(copied_shape.copy())
+    space.add(kinematic_body, *new_shapes)
+    robot.add_to_cart((kinematic_body, new_shapes), space, dynamic_body.mass)
+    # Remove the dynamic body and attached shapes from the space
+    space.remove(dynamic_body, *shapes)
+
 
 def on_dot_robot_collision_w_static(
     arbiter: pymunk.Arbiter, space: pymunk.Space, robot: DotRobot
@@ -1054,6 +1310,32 @@ def get_fingered_robot_action_from_gui_input(
 
     return action
 
+def get_car_robot_action_from_gui_input(
+    action_space: KinRobotActionSpace, gui_input: dict[str, Any]
+) -> NDArray[np.float64]:
+    """Get the mapping from human inputs to actions, derived from action space."""
+    # This will be implemented later - placeholder for now
+    right_x, right_y = gui_input["right_stick"]
+    left_x, _ = gui_input["left_stick"]
+
+    # Initialize the action.
+    low = action_space.low
+    high = action_space.high
+    action = np.zeros(action_space.shape, action_space.dtype)
+
+    def _rescale(x: float, lb: float, ub: float) -> float:
+        """Rescale from [-1, 1] to [lb, ub]."""
+        return lb + (x + 1) * (ub - lb) / 2
+
+    # The right stick controls the x, y movement of the base.
+    action[0] = _rescale(right_x, low[0], high[0])
+    action[1] = _rescale(right_y, low[1], high[1])
+
+    # The left stick controls the rotation of the base. Only the x axis
+    # is used right now.
+    action[2] = _rescale(left_x, low[2], high[2])
+
+    return action
 
 def get_dot_robot_action_from_gui_input(
     action_space: DotRobotActionSpace, gui_input: dict[str, Any]
