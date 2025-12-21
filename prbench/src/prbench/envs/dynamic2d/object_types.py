@@ -43,13 +43,6 @@ Dynamic2DRobotEnvTypeFeatures[DynRectangleType] = Dynamic2DRobotEnvTypeFeatures[
     "height",
     "mass",
 ]
-DynCircleType = Type("dyn_circle", parent=Dynamic2DType)
-Dynamic2DRobotEnvTypeFeatures[DynCircleType] = Dynamic2DRobotEnvTypeFeatures[
-    Dynamic2DType
-] + [
-    "radius",
-    "mass",
-]
 LObjectType = Type("lobject", parent=Dynamic2DType)
 Dynamic2DRobotEnvTypeFeatures[LObjectType] = Dynamic2DRobotEnvTypeFeatures[
     Dynamic2DType
