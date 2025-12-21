@@ -97,11 +97,9 @@ class CarRobotActionSpace(RobotActionSpace):
     def create_markdown_description(self) -> str:
         """Create a human-readable markdown description of this space."""
         features = [
-            ("dx", "Change in robot x position (positive is right)"),
-            ("dy", "Change in robot y position (positive is up)"),
-            ("dtheta", "Change in robot angle in radians (positive is ccw)"),
-            ("darm", "Change in robot arm length (positive is out)"),
-            ("dgripper", "Change in gripper gap (positive is open)"),
+            ("fx", "Force in x direction (positive is right)"),
+            ("fy", "Force in y direction (positive is up)"),
+            ("fsteer", "Steering force (positive is counterclockwise)"),
         ]
         md_table_str = (
             "| **Index** | **Feature** | **Description** | **Min** | **Max** |"
