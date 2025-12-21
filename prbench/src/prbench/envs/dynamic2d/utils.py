@@ -308,7 +308,7 @@ class CarRobot:
         # Track last robot state
         self._base_position = init_pos
         self._base_angle = init_theta
-        self.held_objects: list[tuple[tuple[Body, list[Shape]], float, SE2Pose]] = []
+        self.held_objects: list[int] = []
 
         # Body and shape references
         self.create_base()
@@ -379,16 +379,6 @@ class CarRobot:
         self._base_body.position = (base_x, base_y)
         self._base_body.velocity = base_vel[0]
 
-        # Reset held objects - they have the same velocity as gripper base
-        if len(self.held_objects):
-            for i, (obj, _, relative_pose) in enumerate(self.held_objects):
-                obj_body, _ = obj
-                new_obj_pose = self.base_pose * relative_pose
-                obj_body.angle = new_obj_pose.theta
-                obj_body.position = (new_obj_pose.x, new_obj_pose.y)
-                obj_body.velocity = self._base_body.velocity
-                obj_body.angular_velocity = self._base_body.angular_velocity
-
         # Update last state
         self.update_last_state()
 
@@ -398,15 +388,6 @@ class CarRobot:
         self._base_body.position = self._base_position
         self._base_body.velocity = Vec2d(0.0, 0.0)
         self._base_body.angular_velocity = 0.0
-
-        # Update held objects
-        for obj, _, relative_pose in self.held_objects:
-            obj_body, _ = obj
-            new_obj_pose = self.base_pose * relative_pose
-            obj_body.angle = new_obj_pose.theta
-            obj_body.position = (new_obj_pose.x, new_obj_pose.y)
-            obj_body.velocity = Vec2d(0.0, 0.0)
-            obj_body.angular_velocity = 0.0
 
 
     def update_last_state(self) -> None:
@@ -436,30 +417,10 @@ class CarRobot:
             (0, self.base_length / 3)
         )
 
-        # Update held objects - they have the same velocity as gripper base
-        for _, (obj, _, _) in enumerate(self.held_objects):
-            obj_body, _ = obj
-            obj_body.velocity = self._base_body.velocity
-            obj_body.angular_velocity = self._base_body.angular_velocity
-
-    def add_to_cart(self, obj: tuple[Body, list[Shape]], space: pymunk.Space, mass: float) -> None:
+    def add_to_cart(self, obj_id: int) -> None:
         """Add an object to the robot's hand."""
-        obj_body, _ = obj
-        obj_pose = SE2Pose(
-            x=obj_body.position.x, y=obj_body.position.y, theta=obj_body.angle
-        )
-        relative_obj_pose = self.base_pose.inverse * obj_pose
-        self.held_objects.append((obj, mass, relative_obj_pose))
-        dummy_shape = pymunk.Circle(self._base_body, 0.01)
-        dummy_shape.mass = mass
-        space.add(dummy_shape)
+        self.held_objects.append(obj_id)
 
-    def body_in_cart(self, body_id: int) -> bool:
-        """Check if a body is in the robot's hand."""
-        for (obj_body, _), _, _ in self.held_objects:
-            if obj_body.id == body_id:
-                return True
-        return False
 
 class KinRobot:
     """Robot implementation using PyMunk physics engine with four bodies.
@@ -1137,21 +1098,12 @@ def on_collision_w_object_car(
 ) -> None:
     """Collision callback for robot colliding with dynamic objects."""
     dynamic_body = arbiter.bodies[0]
-    # Create a new kinematic object
-    kinematic_body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
-    kinematic_body.position = dynamic_body.position
-    kinematic_body.angle = dynamic_body.angle
     shapes = dynamic_body.shapes
-    new_shapes: list[Shape] = []
     for shape in shapes:
-        copied_shape = shape.copy()
-        copied_shape.body = kinematic_body
-        # Held objects are considered part of the robot for collision purposes
-        # NOTE: Reset with this has not being tested to pass yet
-        # copied_shape.collision_type = ROBOT_COLLISION_TYPE
-        new_shapes.append(copied_shape.copy())
-    space.add(kinematic_body, *new_shapes)
-    robot.add_to_cart((kinematic_body, new_shapes), space, dynamic_body.mass)
+        assert isinstance(shape, pymunk.Circle)
+        robot._base_body.mass += dynamic_body.mass
+        robot._base_body.moment += dynamic_body.moment
+        robot.add_to_cart(dynamic_body.id)
     # Remove the dynamic body and attached shapes from the space
     space.remove(dynamic_body, *shapes)
 
