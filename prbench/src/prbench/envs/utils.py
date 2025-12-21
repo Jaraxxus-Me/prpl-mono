@@ -524,6 +524,62 @@ def dot_robot_to_multibody2d(obj: Object, state: ObjectCentricState) -> MultiBod
     return MultiBody2D(name=obj.name, bodies=bodies)
 
 
+def car_robot_to_multibody2d(obj: Object, state: ObjectCentricState) -> MultiBody2D:
+    """Helper for object_to_multibody2d() for DotRobotType."""
+    assert obj.is_instance(CarRobotType)
+    bodies: list[Body2D] = []
+
+    # Car body
+    x = state.get(obj, "x")
+    y = state.get(obj, "y")
+    width = state.get(obj, "width")
+    height = state.get(obj, "height")
+    theta = state.get(obj, "theta")
+    # Different from RectangleType, use from_center.
+    geom = Rectangle.from_center(x, y, width, height, theta)
+    z_order = ZOrder(int(state.get(obj, "z_order")))
+    rendering_kwargs = {
+        "facecolor": PURPLE,
+        "edgecolor": BLACK,
+    }
+    base_body = Body2D(geom, z_order, rendering_kwargs)
+    bodies.append(base_body)
+
+    # Two circles (front lights) indicating front of the car
+    body_pose = SE2Pose(x, y, theta)
+    rel_pose = SE2Pose(-width / 4, height / 2, 0.0)
+    front_circle1_pose = body_pose * rel_pose
+    circ = Circle(x=front_circle1_pose.x, y=front_circle1_pose.y, radius=width / 6)
+    z_order = ZOrder.FLOOR
+    rendering_kwargs = {
+        "facecolor": (50 / 255, 50 / 255, 255 / 255),
+    }
+    light1 = Body2D(
+        geom=circ,
+        z_order=z_order,
+        rendering_kwargs=rendering_kwargs,
+        name="light1",
+    )
+
+    rel_pose = SE2Pose(width / 4, height / 2, 0.0)
+    front_circle2_pose = body_pose * rel_pose
+    circ = Circle(x=front_circle2_pose.x, y=front_circle2_pose.y, radius=width / 8)
+    z_order = ZOrder.ALL
+    rendering_kwargs = {
+        "facecolor": (50 / 255, 50 / 255, 255 / 255),
+    }
+    light2 = Body2D(
+        geom=circ,
+        z_order=z_order,
+        rendering_kwargs=rendering_kwargs,
+        name="light2",
+    )
+
+    bodies.append(light1)
+    bodies.append(light2)
+
+    return MultiBody2D(name=obj.name, bodies=bodies)
+
 def tobject_to_multibody2d(obj: Object, state: ObjectCentricState) -> MultiBody2D:
     """Helper for object_to_multibody2d() for TObjectType."""
     assert obj.is_instance(TObjectType)
@@ -578,20 +634,8 @@ def object_to_multibody2d(
     if obj.is_instance(TObjectType):
         return tobject_to_multibody2d(obj, state)
     if obj.is_instance(CarRobotType):
-        x = state.get(obj, "x")
-        y = state.get(obj, "y")
-        width = state.get(obj, "width")
-        height = state.get(obj, "height")
-        theta = state.get(obj, "theta")
-        # Different from RectangleType, use from_center.
-        geom = Rectangle.from_center(x, y, width, height, theta)
-        z_order = ZOrder(int(state.get(obj, "z_order")))
-        rendering_kwargs = {
-            "facecolor": PURPLE,
-            "edgecolor": BLACK,
-        }
-        body = Body2D(geom, z_order, rendering_kwargs)
-        return MultiBody2D(obj.name, [body])
+        return car_robot_to_multibody2d(obj, state)
+
     is_static = state.get(obj, "static") > 0.5
     if is_static and obj in static_object_cache:
         return static_object_cache[obj]

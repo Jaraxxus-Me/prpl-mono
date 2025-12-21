@@ -95,9 +95,8 @@ class CarRobotActionSpace(RobotActionSpace):
     def create_markdown_description(self) -> str:
         """Create a human-readable markdown description of this space."""
         features = [
-            ("fx", "Force in x direction (positive is right)"),
-            ("fy", "Force in y direction (positive is up)"),
-            ("fsteer", "Steering force (positive is counterclockwise)"),
+            ("forward_force", "Force in forward direction (local Y-axis)"),
+            ("steering_force", "Steering force (applied at front of robot)"),
         ]
         md_table_str = (
             "| **Index** | **Feature** | **Description** | **Min** | **Max** |"
@@ -431,12 +430,9 @@ class CarRobot:
         self._base_body.apply_force_at_local_point((0.0, forward_force), (0, 0))
         # Steering force is applied at the front of the car, like a bicycle
         # calculate direction vector
-        current_angle = self._base_body.angle
-        steer_x = math.cos(current_angle)
-        steer_y = math.sin(current_angle)
         # apply force at front
         self._base_body.apply_force_at_local_point(
-            Vec2d(steer_x * steering_force, steer_y * steering_force), 
+            Vec2d(steering_force, 0), 
             (0, self.base_length / 3)
         )
 
