@@ -146,6 +146,6 @@ Dynamic2DRobotEnvTypeFeatures[CarRobotType] = [
     "omega_base",
     "fx",
     "fy",
-    "fsteering",
+    "torque",
     "mass"
 ]

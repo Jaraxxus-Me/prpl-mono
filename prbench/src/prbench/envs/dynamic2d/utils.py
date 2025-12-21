@@ -296,6 +296,7 @@ class CarRobot:
     def __init__(
         self,
         init_pos: Vec2d = Vec2d(5.0, 5.0),
+        init_theta: float = 0.0,
         base_width: float = 0.4,
         base_length: float = 0.7,
         mass: float = 1.0,
@@ -309,7 +310,7 @@ class CarRobot:
 
         # Track last robot state
         self._base_position = init_pos
-        self._base_angle = 0.0
+        self._base_angle = init_theta
         self.held_objects: list[tuple[tuple[Body, list[Shape]], float, SE2Pose]] = []
 
         # Body and shape references
