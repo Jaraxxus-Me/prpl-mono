@@ -303,7 +303,7 @@ class CarRobot:
         self.base_width = base_width
         self.base_length = base_length
         self.base_collision_type = base_collision_type
-        self.base_mass = mass
+        self.base_mass_init = mass
 
         # Track last robot state
         self._base_position = init_pos
@@ -332,17 +332,23 @@ class CarRobot:
         self._base_shape.friction = 1
         self._base_shape.collision_type = self.base_collision_type
         self._base_shape.density = 1.0
-        self._base_shape.mass = self.base_mass
+        self._base_shape.mass = self.base_mass_init
         self._base_body.angle = self._base_angle
         self._base_body.position = self._base_position
 
     @property
     def base_pose(self) -> SE2Pose:
         """Get the base pose as SE2Pose."""
+        raw_angle = self._base_body.angle
+        # constrain angle to [-pi, pi]
+        if raw_angle > math.pi:
+            raw_angle -= 2 * math.pi
+        elif raw_angle < -math.pi:
+            raw_angle += 2 * math.pi
         return SE2Pose(
             x=self._base_body.position.x,
             y=self._base_body.position.y,
-            theta=self._base_body.angle,
+            theta=raw_angle,
         )
 
     @property
@@ -360,6 +366,11 @@ class CarRobot:
     def base_force(self) -> tuple[Vec2d, float]:
         """Get the base linear and angular force."""
         return self._base_body.force, self._base_body.torque
+
+    @property
+    def base_mass_moment(self) -> tuple[float, float]:
+        """Get the base mass and moment of inertia."""
+        return self._base_body.mass, self._base_body.moment
 
     @property
     def body_id(self) -> int:
@@ -395,7 +406,13 @@ class CarRobot:
         self._base_position = Vec2d(
             self._base_body.position.x, self._base_body.position.y
         )
-        self._base_angle = self._base_body.angle
+        raw_angle = self._base_body.angle
+        # constrain angle to [-pi, pi]
+        if raw_angle > math.pi:
+            raw_angle -= 2 * math.pi
+        elif raw_angle < -math.pi:
+            raw_angle += 2 * math.pi
+        self._base_angle = raw_angle
 
 
     def update(
@@ -409,12 +426,16 @@ class CarRobot:
         # Update velocities
         # Y-direction is forward for the car
         self._base_body.apply_force_at_local_point((0.0, forward_force), (0, 0))
-        # Steering force is applied at the front of the car, like a bicycle
-        # calculate direction vector
+        # Steering force is applied at both the front and the bottom of the car
         # apply force at front
         self._base_body.apply_force_at_local_point(
-            Vec2d(steering_force, 0), 
+            Vec2d(steering_force / 2, 0), 
             (0, self.base_length / 3)
+        )
+        # apply force at back to compensate translational effect
+        self._base_body.apply_force_at_local_point(
+            Vec2d(-steering_force / 2, 0),
+            (0, -self.base_length / 3)
         )
 
     def add_to_cart(self, obj_id: int) -> None:
