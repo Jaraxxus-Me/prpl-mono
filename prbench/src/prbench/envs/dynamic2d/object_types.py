@@ -43,6 +43,13 @@ Dynamic2DRobotEnvTypeFeatures[DynRectangleType] = Dynamic2DRobotEnvTypeFeatures[
     "height",
     "mass",
 ]
+DynCircleType = Type("dyn_circle", parent=Dynamic2DType)
+Dynamic2DRobotEnvTypeFeatures[DynCircleType] = Dynamic2DRobotEnvTypeFeatures[
+    Dynamic2DType
+] + [
+    "radius",
+    "mass",
+]
 LObjectType = Type("lobject", parent=Dynamic2DType)
 Dynamic2DRobotEnvTypeFeatures[LObjectType] = Dynamic2DRobotEnvTypeFeatures[
     Dynamic2DType
@@ -127,4 +134,18 @@ Dynamic2DRobotEnvTypeFeatures[DotRobotType] = [
     "color_b",
     "z_order",
     "radius",
+]
+# A car-robot with a rectangle base.
+CarRobotType = Type("car_robot", parent=Dynamic2DType)
+Dynamic2DRobotEnvTypeFeatures[CarRobotType] = [
+    "x",
+    "y",
+    "theta",
+    "vx_base",
+    "vy_base",
+    "omega_base",
+    "fx",
+    "fy",
+    "fsteering",
+    "mass"
 ]

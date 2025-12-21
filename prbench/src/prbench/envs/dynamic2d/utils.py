@@ -299,7 +299,7 @@ class CarRobot:
         self,
         init_pos: Vec2d = Vec2d(5.0, 5.0),
         base_width: float = 0.4,
-        base_length: float = 0.6,
+        base_length: float = 0.7,
         mass: float = 1.0,
         base_collision_type: int = ROBOT_COLLISION_TYPE,
     ) -> None:
@@ -361,15 +361,6 @@ class CarRobot:
             self._base_body.torque / self._base_body.moment
 
     @property
-    def held_object_vels(self) -> list[tuple[Vec2d, float]]:
-        """Get the held object linear and angular velocity."""
-        vel_list = []
-        for obj, _, _ in self.held_objects:
-            obj_body, _ = obj
-            vel_list.append((obj_body.velocity, obj_body.angular_velocity))
-        return vel_list
-
-    @property
     def body_id(self) -> int:
         """Get the base id in pymunk space."""
         return self._base_body.id
@@ -380,7 +371,6 @@ class CarRobot:
         base_y: float,
         base_theta: float,
         base_vel: tuple[Vec2d, float],
-        helder_object_vels: list[Vec2d] | None = None,
     ) -> None:
         """Reset robot to specified positions with zero velocity."""
         self._base_body.angle = base_theta
@@ -389,16 +379,13 @@ class CarRobot:
         self._base_body.velocity = base_vel[0]
 
         # Reset held objects - they have the same velocity as gripper base
-        if helder_object_vels is not None and len(helder_object_vels):
-            assert len(helder_object_vels) == len(
-                self.held_objects
-            ), "Length of helder_object_vels must match the number of held objects."
+        if len(self.held_objects):
             for i, (obj, _, relative_pose) in enumerate(self.held_objects):
                 obj_body, _ = obj
                 new_obj_pose = self.base_pose * relative_pose
                 obj_body.angle = new_obj_pose.theta
                 obj_body.position = (new_obj_pose.x, new_obj_pose.y)
-                obj_body.velocity = helder_object_vels[i]
+                obj_body.velocity = self._base_body.velocity
                 obj_body.angular_velocity = self._base_body.angular_velocity
 
         # Update last state
@@ -440,7 +427,7 @@ class CarRobot:
         # Update velocities
         self._base_body.apply_force_at_local_point(base_force, (0, 0))
         self._base_body.apply_force_at_local_point(
-            Vec2d(0, steering_force), (0, self.base_length / 2)
+            Vec2d(0, steering_force), (0, self.base_length / 3)
         )
 
         # Update held objects - they have the same velocity as gripper base
