@@ -83,15 +83,13 @@ class CarRobotActionSpace(RobotActionSpace):
 
     def __init__(
         self,
-        min_fx: float = -2.0,
-        max_fx: float = 2.0,
-        min_fy: float = -2.0,
-        max_fy: float = 2.0,
+        min_forward: float = -2.0,
+        max_forward: float = 2.0,
         min_fsteer: float = -0.5,
         max_fsteer: float = 0.5,
     ) -> None:
-        low = np.array([min_fx, min_fy, min_fsteer])
-        high = np.array([max_fx, max_fy, max_fsteer])
+        low = np.array([min_forward, min_fsteer])
+        high = np.array([max_forward, max_fsteer])
         super().__init__(low, high, dtype=np.float64)
 
     def create_markdown_description(self) -> str:
@@ -422,20 +420,28 @@ class CarRobot:
 
     def update(
         self,
-        base_force: Vec2d,
+        forward_force: float,
         steering_force: float,
     ) -> None:
         """Update the body velocities."""
         # Update robot last state
         self.update_last_state()
         # Update velocities
-        self._base_body.apply_force_at_local_point(base_force, (0, 0))
+        # Y-direction is forward for the car
+        self._base_body.apply_force_at_local_point((0.0, forward_force), (0, 0))
+        # Steering force is applied at the front of the car, like a bicycle
+        # calculate direction vector
+        current_angle = self._base_body.angle
+        steer_x = math.cos(current_angle)
+        steer_y = math.sin(current_angle)
+        # apply force at front
         self._base_body.apply_force_at_local_point(
-            Vec2d(0, steering_force), (0, self.base_length / 3)
+            Vec2d(steer_x * steering_force, steer_y * steering_force), 
+            (0, self.base_length / 3)
         )
 
         # Update held objects - they have the same velocity as gripper base
-        for i, (obj, _, _) in enumerate(self.held_objects):
+        for _, (obj, _, _) in enumerate(self.held_objects):
             obj_body, _ = obj
             obj_body.velocity = self._base_body.velocity
             obj_body.angular_velocity = self._base_body.angular_velocity
