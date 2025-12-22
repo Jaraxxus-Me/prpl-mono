@@ -88,14 +88,15 @@ class CarRobotActionSpace(RobotActionSpace):
         min_fsteer: float = -0.5,
         max_fsteer: float = 0.5,
     ) -> None:
-        low = np.array([min_forward, min_fsteer])
-        high = np.array([max_forward, max_fsteer])
+        low = np.array([min_forward, min_forward, min_fsteer])
+        high = np.array([max_forward, max_forward, max_fsteer])
         super().__init__(low, high, dtype=np.float64)
 
     def create_markdown_description(self) -> str:
         """Create a human-readable markdown description of this space."""
         features = [
             ("forward_force", "Force in forward direction (local Y-axis)"),
+            ("forward_force", "Force in lateral direction (local X-axis)"),
             ("steering_force", "Steering force (applied at front of robot)"),
         ]
         md_table_str = (
@@ -383,12 +384,15 @@ class CarRobot:
         base_y: float,
         base_theta: float,
         base_vel: tuple[Vec2d, float],
+        base_force: tuple[Vec2d, float] = (Vec2d(0.0, 0.0), 0.0),
     ) -> None:
         """Reset robot to specified positions with zero velocity."""
         self._base_body.angle = base_theta
         self._base_body.angular_velocity = base_vel[1]
         self._base_body.position = (base_x, base_y)
         self._base_body.velocity = base_vel[0]
+        self._base_body.apply_force_at_local_point(base_force[0], (0, 0))
+        self._base_body.torque = base_force[1]
 
         # Update last state
         self.update_last_state()
@@ -417,7 +421,8 @@ class CarRobot:
 
     def update(
         self,
-        forward_force: float,
+        forward_force_y: float,
+        forward_force_x: float,
         steering_force: float,
     ) -> None:
         """Update the body velocities."""
@@ -425,7 +430,7 @@ class CarRobot:
         self.update_last_state()
         # Update velocities
         # Y-direction is forward for the car
-        self._base_body.apply_force_at_local_point((0.0, forward_force), (0, 0))
+        self._base_body.apply_force_at_local_point((forward_force_x, forward_force_y), (0, 0))
         # Steering force is applied at both the front and the bottom of the car
         # apply force at front
         self._base_body.apply_force_at_local_point(
@@ -441,6 +446,26 @@ class CarRobot:
     def add_to_cart(self, obj_id: int) -> None:
         """Add an object to the robot's hand."""
         self.held_objects.append(obj_id)
+
+
+    def external_effect_force_torque(
+        self,
+        force: Vec2d,
+        local_point: Vec2d,
+        torque: float,
+    ) -> None:
+        """Apply external force and torque to the robot base."""
+        self._base_body.apply_force_at_world_point(force, local_point)
+        torque_force = torque / (self.base_length / 3 * 2)  # torque = force * distance
+        self._base_body.apply_force_at_local_point(
+            Vec2d(torque_force, 0), 
+            (0, self.base_length / 3)
+        )
+        # apply force at back to compensate translational effect
+        self._base_body.apply_force_at_local_point(
+            Vec2d(-torque_force, 0),
+            (0, -self.base_length / 3)
+        )
 
 
 class KinRobot:
