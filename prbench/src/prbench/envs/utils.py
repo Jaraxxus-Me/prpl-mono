@@ -668,6 +668,11 @@ def object_to_multibody2d(
         # Different from RectangleType, use from_center.
         geom = Rectangle.from_center(x, y, width, height, theta)
         z_order = ZOrder(int(state.get(obj, "z_order")))
+        if "activated" in state.type_features[obj.type]:
+            activated = state.get(obj, "activated") > 0.5
+            alpha = 1.0 if activated else 0.2
+        else:
+            alpha = 1.0
         rendering_kwargs = {
             "facecolor": (
                 state.get(obj, "color_r"),
@@ -675,6 +680,7 @@ def object_to_multibody2d(
                 state.get(obj, "color_b"),
             ),
             "edgecolor": BLACK,
+            "alpha": alpha,
         }
         body = Body2D(geom, z_order, rendering_kwargs)
         multibody = MultiBody2D(obj.name, [body])
