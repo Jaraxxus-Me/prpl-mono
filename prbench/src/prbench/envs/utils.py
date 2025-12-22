@@ -143,7 +143,8 @@ def render_2dstate_on_ax(
 
     # Sort objects by ascending z order, with the robot first.
     def _render_order(obj: Object) -> int:
-        if obj.is_instance(CRVRobotType) or obj.is_instance(KinRobotType):
+        if obj.is_instance(CRVRobotType) or obj.is_instance(KinRobotType) \
+            or obj.is_instance(DotRobotType) or obj.is_instance(CarRobotType):
             return -1
         return int(state.get(obj, "z_order"))
 
@@ -537,7 +538,7 @@ def car_robot_to_multibody2d(obj: Object, state: ObjectCentricState) -> MultiBod
     theta = state.get(obj, "theta")
     # Different from RectangleType, use from_center.
     geom = Rectangle.from_center(x, y, width, height, theta)
-    z_order = ZOrder(int(state.get(obj, "z_order")))
+    z_order = ZOrder.ALL
     rendering_kwargs = {
         "facecolor": PURPLE,
         "edgecolor": BLACK,
