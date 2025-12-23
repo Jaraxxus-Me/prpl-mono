@@ -455,7 +455,7 @@ class CarRobot:
         torque: float,
     ) -> None:
         """Apply external force and torque to the robot base."""
-        self._base_body.apply_force_at_world_point(force, local_point)
+        self._base_body.apply_force_at_local_point(force, local_point)
         torque_force = torque / (self.base_length / 3 * 2)  # torque = force * distance
         self._base_body.apply_force_at_local_point(
             Vec2d(torque_force, 0), 
