@@ -309,7 +309,7 @@ class CarRobot:
         # Track last robot state
         self._base_position = init_pos
         self._base_angle = init_theta
-        self.held_objects: list[int] = []
+        self.held_objects: list[tuple[float]] = []
 
         # Body and shape references
         self.create_base()
@@ -443,10 +443,16 @@ class CarRobot:
             (0, -self.base_length / 3)
         )
 
-    def add_to_cart(self, obj_id: int) -> None:
+    def add_to_cart(self, obj_mass: float, obj_moment: float) -> None:
         """Add an object to the robot's hand."""
-        self.held_objects.append(obj_id)
+        self.held_objects.append((obj_mass, obj_moment))
 
+    def remove_from_cart(self) -> None:
+        """Remove an object from the robot's hand."""
+        if len(self.held_objects) > 0:
+            mass, moment = self.held_objects.pop(0)
+            self._base_body.mass -= mass
+            self._base_body.moment -= moment
 
     def external_effect_force_torque(
         self,
