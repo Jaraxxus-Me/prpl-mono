@@ -1155,7 +1155,7 @@ def on_collision_w_object_car(
         assert isinstance(shape, pymunk.Circle)
         robot._base_body.mass += dynamic_body.mass
         robot._base_body.moment += dynamic_body.moment
-        robot.add_to_cart(dynamic_body.id)
+        robot.add_to_cart(dynamic_body.mass, dynamic_body.moment)
     # Remove the dynamic body and attached shapes from the space
     space.remove(dynamic_body, *shapes)
 
