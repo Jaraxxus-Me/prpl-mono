@@ -309,7 +309,7 @@ class CarRobot:
         # Track last robot state
         self._base_position = init_pos
         self._base_angle = init_theta
-        self.held_objects: list[int] = []
+        self.held_objects: list[tuple[float]] = []
 
         # Body and shape references
         self.create_base()
@@ -443,13 +443,16 @@ class CarRobot:
             (0, -self.base_length / 3)
         )
 
-    def add_to_cart(self, obj_id: int) -> None:
+    def add_to_cart(self, obj_mass: float, obj_moment: float) -> None:
         """Add an object to the robot's hand."""
-        self.held_objects.append(obj_id)
+        self.held_objects.append((obj_mass, obj_moment))
 
     def remove_from_cart(self) -> None:
-        """Remove all objects from the robot's cart."""
-        self.held_objects.clear()
+        """Remove an object from the robot's hand."""
+        if len(self.held_objects) > 0:
+            mass, moment = self.held_objects.pop(0)
+            self._base_body.mass -= mass
+            self._base_body.moment -= moment
 
     def external_effect_force_torque(
         self,
@@ -458,8 +461,10 @@ class CarRobot:
         torque: float,
     ) -> None:
         """Apply external force and torque to the robot base."""
-        self._base_body.apply_force_at_local_point(force, local_point)
-        torque_force = torque / (self.base_length / 3 * 2)  # torque = force * distance
+        scaled_force = force * self._base_body.mass
+        self._base_body.apply_force_at_local_point(scaled_force, local_point)
+        scaled_torque = torque * self._base_body.moment
+        torque_force = scaled_torque / (self.base_length / 3 * 2)  # torque = force * distance
         self._base_body.apply_force_at_local_point(
             Vec2d(torque_force, 0), 
             (0, self.base_length / 3)
@@ -1152,7 +1157,7 @@ def on_collision_w_object_car(
         assert isinstance(shape, pymunk.Circle)
         robot._base_body.mass += dynamic_body.mass
         robot._base_body.moment += dynamic_body.moment
-        robot.add_to_cart(dynamic_body.id)
+        robot.add_to_cart(dynamic_body.mass, dynamic_body.moment)
     # Remove the dynamic body and attached shapes from the space
     space.remove(dynamic_body, *shapes)
 
