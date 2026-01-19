@@ -447,6 +447,9 @@ class CarRobot:
         """Add an object to the robot's hand."""
         self.held_objects.append(obj_id)
 
+    def remove_from_cart(self) -> None:
+        """Remove all objects from the robot's cart."""
+        self.held_objects.clear()
 
     def external_effect_force_torque(
         self,
